@@ -1,0 +1,10 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "DuckDB",
+            "database": "${workspaceFolder:DataProject}/database/polygon.duckdb",
+            "name": "PolygonDB"
+        }
+    ]
+}
