@@ -4,8 +4,8 @@ import os
 
 import duckdb as ddb
 from dotenv import load_dotenv
-from extract_polygon import BatchTickerExtractor, TickerDetailsExtractor
 
+from ELT.extract_polygon import BatchTickerExtractor, TickerDetailsExtractor
 from logger import get_logger
 
 
@@ -26,7 +26,9 @@ class PolygonDataLoader:
             self.logger.error("DB_PATH not found in environment variables")
             raise ValueError("DB_PATH not found in environment variables")
 
-    def load_ticker_details(self, ticker: str, extractor: TickerDetailsExtractor):
+    def load_ticker_details(
+        self, ticker: str, extractor: TickerDetailsExtractor
+    ):
         """
         Load ticker details into the database.
 
@@ -54,7 +56,8 @@ class PolygonDataLoader:
             )
         """)
 
-        self.db_connection.execute("""
+        self.db_connection.execute(
+            """
             INSERT INTO company_details (ticker, name, market_cap, active, composite_figi, base_currency, list_date, primary_exchange,
             shares_outstanding, total_employees, sic_code)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -69,13 +72,27 @@ class PolygonDataLoader:
                 shares_outstanding = EXCLUDED.shares_outstanding,
                 total_employees = EXCLUDED.total_employees,
                 sic_code = EXCLUDED.sic_code
-        """, (ticker, details.get('name'), details.get('market_cap'), details.get('active'), details.get('composite_figi'),
-              details.get('currency_name'), details.get('list_date'), details.get('primary_exchange'),
-              details.get('share_class_shares_outstanding'), details.get('total_employees'), details.get('sic_code')))
+        """,
+            (
+                ticker,
+                details.get("name"),
+                details.get("market_cap"),
+                details.get("active"),
+                details.get("composite_figi"),
+                details.get("currency_name"),
+                details.get("list_date"),
+                details.get("primary_exchange"),
+                details.get("share_class_shares_outstanding"),
+                details.get("total_employees"),
+                details.get("sic_code"),
+            ),
+        )
 
         self.logger.info(f"Successfully loaded details for ticker: {ticker}")
 
-    def load_batch_ticker_details(self, tickers: list[str], batch_extractor: BatchTickerExtractor):
+    def load_batch_ticker_details(
+        self, tickers: list[str], batch_extractor: BatchTickerExtractor
+    ):
         """
         Load ticker details for multiple tickers in batch.
 
@@ -109,7 +126,8 @@ class PolygonDataLoader:
         successful_loads = 0
         for ticker, details in batch_data.items():
             try:
-                self.db_connection.execute("""
+                self.db_connection.execute(
+                    """
                     INSERT INTO company_details (ticker, name, market_cap, active, composite_figi, base_currency, list_date, primary_exchange,
                     shares_outstanding, total_employees, sic_code)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -124,12 +142,26 @@ class PolygonDataLoader:
                         shares_outstanding = EXCLUDED.shares_outstanding,
                         total_employees = EXCLUDED.total_employees,
                         sic_code = EXCLUDED.sic_code
-                """, (ticker, details.get('name'), details.get('market_cap'), details.get('active'), details.get('composite_figi'),
-                      details.get('currency_name'), details.get('list_date'), details.get('primary_exchange'),
-                      details.get('share_class_shares_outstanding'), details.get('total_employees'), details.get('sic_code')))
+                """,
+                    (
+                        ticker,
+                        details.get("name"),
+                        details.get("market_cap"),
+                        details.get("active"),
+                        details.get("composite_figi"),
+                        details.get("currency_name"),
+                        details.get("list_date"),
+                        details.get("primary_exchange"),
+                        details.get("share_class_shares_outstanding"),
+                        details.get("total_employees"),
+                        details.get("sic_code"),
+                    ),
+                )
                 successful_loads += 1
             except Exception as e:
                 self.logger.error(f"Failed to load {ticker}: {e}")
                 continue
 
-        self.logger.info(f"Batch load complete: {successful_loads}/{len(batch_data)} tickers loaded successfully")
+        self.logger.info(
+            f"Batch load complete: {successful_loads}/{len(batch_data)} tickers loaded successfully"
+        )

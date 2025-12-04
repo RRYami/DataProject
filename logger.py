@@ -1,4 +1,5 @@
 """Root logger configuration for the application."""
+
 import atexit
 import json
 import logging.config
