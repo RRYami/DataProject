@@ -1,47 +1,101 @@
 import os
 from logging import Logger
+from typing import Union
 
 import duckdb as ddb
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
 
-import ELT.extract_polygon
-import ELT.load_polygon
 import logger
 
 load_dotenv("./secret/.env")
 loggers: Logger = logger.get_logger(__name__)
 
 
-def main():
-    loggers.info("Starting the extraction process.")
-    if __name__ == "__main__":
-        # Example: Load single ticker
-        # single_extractor = PolygonExtractorFactory.create_ticker_extractor()
-        # loader = PolygonDataLoader()
-        # loader.load_ticker_details("AAPL", single_extractor)
+app = FastAPI()
 
-        # Example: Load batch of tickers
-        batch_extractor = (
-            ELT.extract_polygon.PolygonExtractorFactory.create_batch_extractor()
+
+@app.get("/priceHistory/{ticker}")
+async def get_price_history(
+    ticker: str,
+    start_date: Union[str, None] = None,
+    end_date: Union[str, None] = None,
+):
+    """
+    Return price history for the given ticker from the database.
+    Optional start_date and end_date can be provided to filter the results.
+    """
+    db_path = os.getenv("DB_PATH")
+    if not db_path:
+        loggers.error("DB_PATH not found in environment variables")
+        raise HTTPException(
+            status_code=500, detail="Database path not configured"
         )
-        loader = ELT.load_polygon.PolygonDataLoader()
-        tickers_to_load: list[str] = ["MRVL", "CRWV", "OKLO", "QCOM"]
-        loader.load_batch_ticker_details(tickers_to_load, batch_extractor)
 
-        # Query to verify data load
-        db_path = os.getenv("DB_PATH")
-        if db_path is not None:
-            db_connection = ddb.connect(db_path)
-        else:
-            loggers.error("DB_PATH not found in environment variables")
-            raise ValueError("DB_PATH not found in environment variables")
-        result = db_connection.execute(
-            "FROM company_details Join sic_codes on company_details.sic_code = sic_codes.sic_code"
-        ).pl()
-        # Convert result to Polars DataFrame for better visualization
-        result.write_csv("result.csv")
-        print(result)
+    conn = ddb.connect(db_path)
+    query = """
+        SELECT *
+        FROM price_data
+        WHERE UPPER(ticker) = UPPER(?)
+    """
+    params = [ticker]
+
+    if start_date:
+        query += f" AND date >= '{start_date}'"
+
+    if end_date:
+        query += f" AND date <= '{end_date}'"
+
+    try:
+        df = conn.execute(query, params).pl()
+        data = df.to_dicts()
+    except Exception:
+        loggers.exception("Failed to query price history")
+        raise HTTPException(status_code=500, detail="Database query failed")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if not data:
+        raise HTTPException(status_code=404, detail="Ticker not found")
+
+    return {"ticker": ticker.upper(), "results": data}
 
 
-if __name__ == "__main__":
-    main()
+@app.get("/company/{ticker}")
+async def get_company(ticker: str):
+    """
+    Return company details for the given ticker from the database.
+    """
+    db_path = os.getenv("DB_PATH")
+    if not db_path:
+        loggers.error("DB_PATH not found in environment variables")
+        raise HTTPException(
+            status_code=500, detail="Database path not configured"
+        )
+
+    conn = ddb.connect(db_path)
+    query = """
+        SELECT cd.*, sc.office as sic_office, sc.industry as sic_industry
+        FROM company_details cd
+        LEFT JOIN sic_codes sc ON cd.sic_code = sc.sic_code
+        WHERE UPPER(cd.ticker) = UPPER(?)
+    """
+    try:
+        df = conn.execute(query, (ticker,)).pl()
+        data = df.to_dicts()
+    except Exception:
+        loggers.exception("Failed to query company details")
+        raise HTTPException(status_code=500, detail="Database query failed")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if not data:
+        raise HTTPException(status_code=404, detail="Ticker not found")
+
+    return {"ticker": ticker.upper(), "results": data}

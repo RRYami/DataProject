@@ -128,15 +128,67 @@ loader.load_batch_ticker_details(tickers_to_load, batch_extractor)
 
 ### Running the Application
 
+You can run the project either as a simple script (for extraction & load flows) or as a FastAPI service (to expose the REST API).
+
+Option 1 — Run extraction/load as a script
 ```bash
 python main.py
 ```
-
-The application will:
+This executes the example flows in `main.py`:
 1. Extract ticker data from Polygon.io
 2. Load data into DuckDB
 3. Join company details with SIC codes
 4. Export results to `result.csv`
+
+Option 2 — Run the FastAPI REST service (recommended to query data)
+From the project root (`DataProject`), start the ASGI server:
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+This exposes the FastAPI application with interactive docs at:
+- OpenAPI UI: http://127.0.0.1:8000/docs
+- Redoc: http://127.0.0.1:8000/redoc
+
+REST API: Company lookup
+- Endpoint: `GET /company/{ticker}`
+  - Description: Returns company rows from the database for the given ticker (case-insensitive). The response includes joined SIC code fields (`sic_office`, `sic_industry`) when available.
+  - Example request:
+    - Browser / HTTP: `http://127.0.0.1:8000/company/AAPL`
+    - curl:
+      ```bash
+      curl http://127.0.0.1:8000/company/AAPL
+      ```
+  - Example successful response:
+    ```json
+    {
+      "ticker": "AAPL",
+      "results": [
+        {
+          "id": 123,
+          "ticker": "AAPL",
+          "name": "Apple Inc.",
+          "market_cap": 2000000000000,
+          "sic_code": 3571,
+          "sic_office": "Office of Technology",
+          "sic_industry": "ELECTRONIC COMPUTERS",
+          ...
+        }
+      ]
+    }
+    ```
+
+Environment and DB notes
+- Ensure `DB_PATH` is set in `secret/.env` (or environment) before starting the service. Example:
+  ```
+  DB_PATH=./database/polygon.duckdb
+  POLYGON_API_KEY=your_polygon_api_key_here
+  ```
+- If `DB_PATH` is not configured, the endpoint will return a 500 error indicating the database path is not configured.
+- If a ticker is not found, the endpoint returns a 404 with `{"detail": "Ticker not found"}`.
+
+Troubleshooting
+- Use the interactive docs at `/docs` to verify the endpoint and try sample values.
+- Check logs in the `logs/` directory for query errors or DB issues.
 
 ### Querying the Database
 

@@ -1,12 +1,9 @@
 """Extract data from Polygon.io API for ELT pipeline."""
 
-import json
 import os
-from datetime import datetime
-from typing import Any
+import time
+from typing import Any, Union
 
-import pendulum as p
-import requests
 from dotenv import load_dotenv
 from polygon import RESTClient
 
@@ -73,29 +70,6 @@ class PolygonClient:
         return self.client
 
 
-class AlphaVantageClient:
-    """
-    Responsible for managing the Alpha Vantage API client connection.
-
-    Single Responsibility: Client initialization and lifecycle management.
-    """
-
-    def __init__(self):
-        """
-        Initialize Alpha Vantage REST client.
-
-        Args:
-            api_key: Alpha Vantage API key
-        """
-        self.api_key = ApiKeyProvider.get_api_key("ALPHA_VANTAGE_KEY")
-        self.destination_folder = os.getenv("FUNDAMENTALS_DATA_PATH")
-        logger.info("Alpha Vantage API client initialized")
-
-    def get_api_key(self) -> str:
-        """Return the API key."""
-        return self.api_key
-
-
 class TickerDetailsExtractor:
     """
     Responsible for extracting ticker details from Polygon API.
@@ -137,249 +111,6 @@ class TickerDetailsExtractor:
         return data
 
 
-class FundamentalsDataExtractor:
-    def __str__(self) -> str:
-        return f"FundamentalsDataDownloader({self.statements!r})"
-
-    def __repr__(self) -> str:
-        return f"FundamentalsDataDownloader({self.statements!r})"
-
-    def __init__(
-        self, client: AlphaVantageClient, tickers: list[str], statements="ALL"
-    ):
-        self.statements = statements
-        self.api_key = client.api_key
-        self.destination_folder: str = client.destination_folder
-        self.tickers = tickers
-        if self.destination_folder is None:
-            logger.error("FUNDAMENTALS_DATA_PATH not found in environment")
-            raise ValueError("FUNDAMENTALS_DATA_PATH not found in environment")
-
-    def get_financial_statement(self):
-        if self.statements == "ALL":
-            self.statements = [
-                "INCOME_STATEMENT",
-                "BALANCE_SHEET",
-                "CASH_FLOW",
-                "EARNINGS",
-                "OVERVIEW",
-            ]
-            try:
-                logger.info("Starting download of all financial statements")
-                for j in self.tickers:
-                    for i in self.statements:
-                        logger.info(f"Downloading {i} for {j}")
-                        url = (
-                            "https://www.alphavantage.co/query?function="
-                            + i
-                            + "&symbol="
-                            + j
-                            + "&apikey="
-                            + self.api_key
-                        )
-                        try:
-                            r = requests.get(url)
-                            r.raise_for_status()
-                        except requests.exceptions.HTTPError as e:
-                            print(e)
-                        match i:
-                            case "INCOME_STATEMENT":
-                                with open(
-                                    self.destination_folder
-                                    + "\\Income Statement\\"
-                                    + j
-                                    + "_"
-                                    + i
-                                    + p.now("Europe/London").format(
-                                        "YYYY-MM-DD"
-                                    )
-                                    + ".json",
-                                    "w",
-                                ) as outfile:
-                                    outfile.write(
-                                        json.dumps(r.json(), indent=4)
-                                    )
-                                    logger.info(
-                                        f"Saved Income Statement for {j}"
-                                    )
-                            case "BALANCE_SHEET":
-                                with open(
-                                    self.destination_folder
-                                    + "\\Balance Sheet\\"
-                                    + j
-                                    + "_"
-                                    + i
-                                    + p.now("Europe/London").format(
-                                        "YYYY-MM-DD"
-                                    )
-                                    + ".json",
-                                    "w",
-                                ) as outfile:
-                                    outfile.write(
-                                        json.dumps(r.json(), indent=4)
-                                    )
-                                    logger.info(f"Saved Balance Sheet for {j}")
-                            case "CASH_FLOW":
-                                with open(
-                                    self.destination_folder
-                                    + "\\Cash Flow\\"
-                                    + j
-                                    + "_"
-                                    + i
-                                    + p.now("Europe/London").format(
-                                        "YYYY-MM-DD"
-                                    )
-                                    + ".json",
-                                    "w",
-                                ) as outfile:
-                                    outfile.write(
-                                        json.dumps(r.json(), indent=4)
-                                    )
-                                    logger.info(f"Saved Cash Flow for {j}")
-                            case "EARNINGS":
-                                with open(
-                                    self.destination_folder
-                                    + "\\Earnings\\"
-                                    + j
-                                    + "_"
-                                    + i
-                                    + p.now("Europe/London").format(
-                                        "YYYY-MM-DD"
-                                    )
-                                    + ".json",
-                                    "w",
-                                ) as outfile:
-                                    outfile.write(
-                                        json.dumps(r.json(), indent=4)
-                                    )
-                                    logger.info(f"Saved Earnings for {j}")
-                            case "OVERVIEW":
-                                with open(
-                                    self.destination_folder
-                                    + "\\Overview\\"
-                                    + j
-                                    + "_"
-                                    + i
-                                    + p.now("Europe/London").format(
-                                        "YYYY-MM-DD"
-                                    )
-                                    + ".json",
-                                    "w",
-                                ) as outfile:
-                                    outfile.write(
-                                        json.dumps(r.json(), indent=4)
-                                    )
-                                    logger.info(f"Saved Overview for {j}")
-                            case _:
-                                logger.warning(
-                                    f"Invalid statement or not added ({self.statements})"
-                                )
-            except Exception as e:
-                logger.error(f"Error getting data: {e}")
-        else:
-            try:
-                for i in self.tickers:
-                    url = (
-                        "https://www.alphavantage.co/query?function="
-                        + str(self.statements)
-                        + "&symbol="
-                        + i
-                        + "&apikey="
-                        + self.api_key
-                    )
-                    r = requests.get(url)
-                    match self.statements:
-                        case "INCOME_STATEMENT":
-                            with open(
-                                self.destination_folder
-                                + "\\Income Statement\\"
-                                + i
-                                + "_"
-                                + p.now("Europe/London").format("YYYY-MM-DD")
-                                + ".json",
-                                "w",
-                            ) as outfile:
-                                outfile.write(json.dumps(r.json(), indent=4))
-                                logger.info(f"Saved Income Statement for {i}")
-                        case "BALANCE_SHEET":
-                            with open(
-                                self.destination_folder
-                                + "\\Balance Sheet\\"
-                                + i
-                                + "_"
-                                + p.now("Europe/London").format("YYYY-MM-DD")
-                                + ".json",
-                                "w",
-                            ) as outfile:
-                                outfile.write(json.dumps(r.json(), indent=4))
-                                logger.info(f"Saved Balance Sheet for {i}")
-                        case "CASH_FLOW":
-                            with open(
-                                self.destination_folder
-                                + "\\Cash Flow\\"
-                                + i
-                                + "_"
-                                + p.now("Europe/London").format("YYYY-MM-DD")
-                                + ".json",
-                                "w",
-                            ) as outfile:
-                                outfile.write(json.dumps(r.json(), indent=4))
-                                logger.info(f"Saved Cash Flow for {i}")
-                        case "EARNINGS":
-                            with open(
-                                self.destination_folder
-                                + "\\Earnings\\"
-                                + i
-                                + "_"
-                                + p.now("Europe/London").format("YYYY-MM-DD")
-                                + ".json",
-                                "w",
-                            ) as outfile:
-                                outfile.write(json.dumps(r.json(), indent=4))
-                                logger.info(f"Saved Earnings for {i}")
-                        case "OVERVIEW":
-                            with open(
-                                self.destination_folder
-                                + "\\Overview\\"
-                                + i
-                                + "_"
-                                + p.now("Europe/London").format("YYYY-MM-DD")
-                                + ".json",
-                                "w",
-                            ) as outfile:
-                                outfile.write(json.dumps(r.json(), indent=4))
-                                logger.info(f"Saved Overview for {i}")
-                        case _:
-                            logger.warning(
-                                f"Invalid statement or not added ({self.statements})"
-                            )
-            except Exception as e:
-                logger.error(f"Error getting data: {e}")
-
-    def get_list_of_reports_dates(self, file_path: str) -> list[datetime]:
-        try:
-            with open(file_path, "r") as f:
-                data = json.load(f)
-        except Exception as e:
-            logger.error(f"No file found at {file_path}: {e}")
-        try:
-            dates_list = []
-            for i in range(len(data["quarterlyReports"])):
-                dates_list.append(
-                    data["quarterlyReports"][i]["fiscalDateEnding"]
-                )
-        except Exception as e:
-            logger.error(f"Error parsing dates from JSON: {e}")
-        try:
-            datetime_list = []
-            for j in dates_list:
-                coverted_string = [datetime.strptime(j, "%Y-%m-%d")]
-                datetime_list.append(coverted_string)
-        except Exception as e:
-            logger.error(f"Error converting strings to datetime: {e}")
-        return datetime_list
-
-
 class BatchTickerExtractor:
     """
     Responsible for orchestrating batch extraction of multiple tickers.
@@ -419,6 +150,122 @@ class BatchTickerExtractor:
         logger.info(
             f"Batch extraction complete: {len(results)}/{len(tickers)} successful"
         )
+        return results
+
+
+class PriceExtractor:
+    """
+    Responsible for extracting batch price data from Polygon API.
+
+    Single Responsibility: Batch price data extraction logic.
+    """
+
+    def __init__(self, client: RESTClient):
+        """
+        Initialize extractor with a Polygon client.
+
+        Args:
+            client: Initialized Polygon REST client
+        """
+        self.client = client
+
+    def extract_range(
+        self, tickers: Union[list[str], str], start_date: str, end_date: str
+    ) -> dict[str, Any]:
+        """
+        Extract price data for multiple tickers between dates.
+        PS: with Polygon free tier, the maximum date range is 2 years.
+        Rate limit: 5 API calls per minute.
+
+        Args:
+            tickers: List of stock ticker symbols (e.g., 'AAPL', 'MSFT')
+            start_date: Start date for extraction (YYYY-MM-DD)
+            end_date: End date for extraction (YYYY-MM-DD)
+
+        Returns:
+            dict mapping ticker symbols to their price data
+
+        Raises:
+            Exception: If API request fails
+        """
+        logger.info(
+            f"Extracting price data for tickers between {start_date} and {end_date}"
+        )
+        results = {}
+
+        if isinstance(tickers, str):
+            tickers = [tickers]
+
+        # Rate limiting: 5 calls per minute
+        batch_size = 5
+        total_tickers = len(tickers)
+
+        for i in range(0, total_tickers, batch_size):
+            batch = tickers[i : i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (total_tickers + batch_size - 1) // batch_size
+
+            logger.info(
+                f"Processing batch {batch_num}/{total_batches} ({len(batch)} tickers)"
+            )
+
+            for ticker in batch:
+                try:
+                    bars = self.client.get_aggs(
+                        ticker,
+                        1,
+                        "day",
+                        start_date,
+                        end_date,
+                    )
+                    results[ticker] = [bar.__dict__ for bar in bars]
+                    logger.info(
+                        f"Successfully extracted price data for {ticker}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error extracting price data for {ticker}: {e}"
+                    )
+                    continue
+
+            # Wait 60 seconds before next batch (unless this is the last batch)
+            if i + batch_size < total_tickers:
+                logger.info(
+                    "Rate limit: waiting 60 seconds before next batch..."
+                )
+                time.sleep(60)
+
+        logger.info(
+            f"Extraction complete: {len(results)}/{total_tickers} tickers successful"
+        )
+        return results
+
+    def extract_day(self, tickers: list[str], date: str) -> dict[str, Any]:
+        """
+        Extract price data for multiple tickers on a specific date.
+
+        Args:
+            tickers: List of stock ticker symbols (e.g., 'AAPL', 'MSFT')
+            date: Date for which to extract price data (YYYY-MM-DD)
+        Returns:
+            dict mapping ticker symbols to their price data
+        Raises:
+            Exception: If API request fails
+        """
+        logger.info(f"Extracting price data for tickers on {date}")
+        results = {}
+        for ticker in tickers:
+            try:
+                bars = self.client.get_daily_open_close_agg(
+                    ticker,
+                    date,
+                    adjusted=True,
+                )
+                logger.info(f"Successfully extracted price data for {ticker}")
+            except Exception as e:
+                logger.error(f"Error extracting price data for {ticker}: {e}")
+                continue
+                results[ticker] = bars.__dict__
         return results
 
 
@@ -465,6 +312,25 @@ class PolygonExtractorFactory:
             PolygonExtractorFactory.create_ticker_extractor(api_key)
         )
         return BatchTickerExtractor(ticker_extractor)
+
+    @staticmethod
+    def create_price_extractor(
+        api_key: str | None = None,
+    ) -> PriceExtractor:
+        """
+        Create a configured PriceExtractor.
+
+        Args:
+            api_key: Optional API key. If None, will load from environment.
+
+        Returns:
+            Configured PriceExtractor instance
+        """
+        if api_key is None:
+            api_key = ApiKeyProvider.get_api_key()
+
+        polygon_client = PolygonClient(api_key)
+        return PriceExtractor(polygon_client.get_client())
 
 
 # extractor = PolygonExtractorFactory.create_ticker_extractor()

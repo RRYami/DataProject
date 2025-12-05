@@ -165,3 +165,64 @@ class PolygonDataLoader:
         self.logger.info(
             f"Batch load complete: {successful_loads}/{len(batch_data)} tickers loaded successfully"
         )
+
+    def load_price_data(self, price_data: dict[str, list[dict]]):
+        """
+        Load price data into the database.
+
+        Args:
+            price_data: Dictionary mapping ticker symbols to their price data
+        """
+        self.logger.info("Starting price data load")
+
+        # Delete Table to start fresh
+        # self.db_connection.execute("DROP TABLE IF EXISTS price_data")
+
+        self.db_connection.execute("""
+            CREATE TABLE IF NOT EXISTS price_data (
+                ticker VARCHAR,
+                date TIMESTAMP,
+                open FLOAT,
+                high FLOAT,
+                low FLOAT,
+                close FLOAT,
+                volume BIGINT,
+                PRIMARY KEY (ticker, date)
+            )
+        """)
+
+        # Load price data for each ticker
+        for ticker, prices in price_data.items():
+            for price in prices:
+                try:
+                    # Convert Unix timestamp (milliseconds) to TIMESTAMP
+                    timestamp_ms = price.get("timestamp")
+
+                    self.db_connection.execute(
+                        """
+                        INSERT INTO price_data (ticker, date, open, high, low, close, volume)
+                        VALUES (?, epoch_ms(?), ?, ?, ?, ?, ?)
+                        ON CONFLICT (ticker, date) DO UPDATE SET
+                            open = EXCLUDED.open,
+                            high = EXCLUDED.high,
+                            low = EXCLUDED.low,
+                            close = EXCLUDED.close,
+                            volume = EXCLUDED.volume
+                    """,
+                        (
+                            ticker,
+                            timestamp_ms,
+                            price.get("open"),
+                            price.get("high"),
+                            price.get("low"),
+                            price.get("close"),
+                            price.get("volume"),
+                        ),
+                    )
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to load price data for {ticker} on {price.get('timestamp')}: {e}"
+                    )
+                    continue
+
+        self.logger.info("Price data load complete")
