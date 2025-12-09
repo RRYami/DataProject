@@ -9,7 +9,7 @@ from typing import Any, Union
 from dotenv import load_dotenv
 from polygon import RESTClient
 
-from logger import get_logger, setup_logging
+from logger.logger import get_logger, setup_logging
 
 setup_logging()
 logger = get_logger(__name__)

@@ -6,12 +6,13 @@ import logging.config
 import pathlib
 from typing import override
 
-log_dir = pathlib.Path(__file__).parent / "logs"
+root_path = pathlib.Path(__file__).parent.parent
+log_dir = root_path / "logs"
 log_dir.mkdir(exist_ok=True)
 
 
 def setup_logging():
-    config_path = pathlib.Path(__file__).parent / "log_config" / "config.json"
+    config_path = root_path / "log_config" / "config.json"
     with open(config_path, "r", encoding="utf-8") as config_file:
         config = json.load(config_file)
     logging.config.dictConfig(config)

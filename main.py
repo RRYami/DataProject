@@ -6,7 +6,7 @@ import duckdb as ddb
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
-import logger
+import logger.logger as logger
 
 load_dotenv("./secret/.env")
 loggers: Logger = logger.get_logger(__name__)
@@ -20,7 +20,7 @@ async def get_price_history(
     ticker: str,
     start_date: Union[str, None] = None,
     end_date: Union[str, None] = None,
-):
+) -> dict:
     """
     Return price history for the given ticker from the database.
     Optional start_date and end_date can be provided to filter the results.
@@ -65,7 +65,7 @@ async def get_price_history(
 
 
 @app.get("/company/{ticker}")
-async def get_company(ticker: str):
+async def get_company(ticker: str) -> dict:
     """
     Return company details for the given ticker from the database.
     """
@@ -78,9 +78,9 @@ async def get_company(ticker: str):
 
     conn = ddb.connect(db_path)
     query = """
-        SELECT cd.*, sc.office as sic_office, sc.industry as sic_industry
+        SELECT cd.*, sc.naics_code, sc.naics_description, sc.sic_code ,sc.sic_description
         FROM company_details cd
-        LEFT JOIN sic_codes sc ON cd.sic_code = sc.sic_code
+        LEFT JOIN sic_to_naics sc ON cd.sic_code = sc.sic_code
         WHERE UPPER(cd.ticker) = UPPER(?)
     """
     try:
@@ -99,3 +99,32 @@ async def get_company(ticker: str):
         raise HTTPException(status_code=404, detail="Ticker not found")
 
     return {"ticker": ticker.upper(), "results": data}
+
+
+@app.get("/list_available_tickers")
+async def list_available_tickers() -> dict:
+    """
+    Return a list of all available tickers in the company_details table.
+    """
+    db_path = os.getenv("DB_PATH")
+    if not db_path:
+        loggers.error("DB_PATH not found in environment variables")
+        raise HTTPException(
+            status_code=500, detail="Database path not configured"
+        )
+
+    conn = ddb.connect(db_path)
+    query = "SELECT DISTINCT ticker FROM company_details"
+    try:
+        df = conn.execute(query).pl()
+        tickers = df["ticker"].to_list()
+    except Exception:
+        loggers.exception("Failed to query available tickers")
+        raise HTTPException(status_code=500, detail="Database query failed")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return {"available_tickers": tickers}

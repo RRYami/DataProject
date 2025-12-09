@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 import ELT.extract_polygon
 import ELT.load_polygon
-import logger
+import logger.logger as logger
 
 load_dotenv("./secret/.env")
 loggers: Logger = logger.get_logger(__name__)

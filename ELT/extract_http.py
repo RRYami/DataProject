@@ -5,7 +5,7 @@ from datetime import datetime
 import pendulum as p
 import requests
 
-from logger import get_logger, setup_logging
+from logger.logger import get_logger, setup_logging
 
 setup_logging()
 logger = get_logger(__name__)

@@ -6,7 +6,7 @@ import duckdb as ddb
 from dotenv import load_dotenv
 
 from ELT.extract_polygon import BatchTickerExtractor, TickerDetailsExtractor
-from logger import get_logger
+from logger.logger import get_logger
 
 
 class PolygonDataLoader:
