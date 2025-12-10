@@ -1,11 +1,17 @@
 """Load polygon data into the database."""
 
 import os
+import time
 
 import duckdb as ddb
+import polars as pl
 from dotenv import load_dotenv
 
-from ELT.extract_polygon import BatchTickerExtractor, TickerDetailsExtractor
+from ELT.extract_polygon import (
+    BatchTickerExtractor,
+    TickerDetailsExtractor,
+    TickerListExtractor,
+)
 from logger.logger import get_logger
 
 
@@ -26,6 +32,59 @@ class PolygonDataLoader:
             self.logger.error("DB_PATH not found in environment variables")
             raise ValueError("DB_PATH not found in environment variables")
 
+    def load_tickers(self, extractor: TickerListExtractor):
+        """
+        Load a list of tickers into the database.
+
+        Args:
+            tickers: List of ticker symbols
+        """
+
+        self.logger.info("Loading tickers into the database.")
+
+        self.db_connection.execute("""
+            CREATE TABLE IF NOT EXISTS tickers (
+                ticker VARCHAR PRIMARY KEY,
+                name VARCHAR,
+                market VARCHAR,
+                locale VARCHAR,
+                active BOOLEAN,
+                source_feed VARCHAR
+            )
+        """)
+
+        try:
+            details = extractor.extract()
+
+            start_time = time.time()
+            self.logger.info(
+                f"Starting database insert for {len(details)} tickers..."
+            )
+
+            # Convert to Polars DataFrame - DuckDB can read it directly!
+            df = pl.DataFrame(details)
+
+            # DuckDB can query the DataFrame directly
+            self.db_connection.execute("""
+                INSERT INTO tickers
+                SELECT * FROM df
+                ON CONFLICT (ticker) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    market = EXCLUDED.market,
+                    locale = EXCLUDED.locale,
+                    active = EXCLUDED.active,
+                    source_feed = EXCLUDED.source_feed
+            """)
+
+            elapsed = time.time() - start_time
+            self.logger.info(
+                f"Successfully loaded {len(details)} tickers into the database in {elapsed:.2f}s"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Failed to load tickers: {e}")
+            raise
+
     def load_ticker_details(
         self, ticker: str, extractor: TickerDetailsExtractor
     ):
@@ -37,42 +96,44 @@ class PolygonDataLoader:
             extractor: The TickerDetailsExtractor instance
         """
         self.logger.info(f"Loading details for ticker: {ticker}")
+
+        # Create table if it doesn't exist
+        self.db_connection.execute("""
+                CREATE TABLE IF NOT EXISTS company_details (
+                    ticker VARCHAR PRIMARY KEY,
+                    name VARCHAR,
+                    market_cap BIGINT,
+                    active BOOLEAN,
+                    composite_figi VARCHAR,
+                    base_currency VARCHAR,
+                    list_date DATE,
+                    primary_exchange VARCHAR,
+                    shares_outstanding BIGINT,
+                    total_employees BIGINT,
+                    sic_code INT
+                )
+            """)
+
         details = extractor.extract(ticker)
 
-        # Example of inserting data into a DuckDB table
-        self.db_connection.execute("""
-            CREATE TABLE IF NOT EXISTS company_details (
-                ticker VARCHAR PRIMARY KEY,
-                name VARCHAR,
-                market_cap BIGINT,
-                active BOOLEAN,
-                composite_figi VARCHAR,
-                base_currency VARCHAR,
-                list_date DATE,
-                primary_exchange VARCHAR,
-                shares_outstanding BIGINT,
-                total_employees BIGINT,
-                sic_code INT
-            )
-        """)
-
+        # For single ticker, traditional insert is fine
         self.db_connection.execute(
             """
-            INSERT INTO company_details (ticker, name, market_cap, active, composite_figi, base_currency, list_date, primary_exchange,
-            shares_outstanding, total_employees, sic_code)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (ticker) DO UPDATE SET
-                name = EXCLUDED.name,
-                market_cap = EXCLUDED.market_cap,
-                active = EXCLUDED.active,
-                composite_figi = EXCLUDED.composite_figi,
-                base_currency = EXCLUDED.base_currency,
-                list_date = EXCLUDED.list_date,
-                primary_exchange = EXCLUDED.primary_exchange,
-                shares_outstanding = EXCLUDED.shares_outstanding,
-                total_employees = EXCLUDED.total_employees,
-                sic_code = EXCLUDED.sic_code
-        """,
+                INSERT INTO company_details (ticker, name, market_cap, active, composite_figi, base_currency, list_date, primary_exchange,
+                shares_outstanding, total_employees, sic_code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (ticker) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    market_cap = EXCLUDED.market_cap,
+                    active = EXCLUDED.active,
+                    composite_figi = EXCLUDED.composite_figi,
+                    base_currency = EXCLUDED.base_currency,
+                    list_date = EXCLUDED.list_date,
+                    primary_exchange = EXCLUDED.primary_exchange,
+                    shares_outstanding = EXCLUDED.shares_outstanding,
+                    total_employees = EXCLUDED.total_employees,
+                    sic_code = EXCLUDED.sic_code
+            """,
             (
                 ticker,
                 details.get("name"),
@@ -107,30 +168,55 @@ class PolygonDataLoader:
 
         # Create table if it doesn't exist
         self.db_connection.execute("""
-            CREATE TABLE IF NOT EXISTS company_details (
-                ticker VARCHAR PRIMARY KEY,
-                name VARCHAR,
-                market_cap BIGINT,
-                active BOOLEAN,
-                composite_figi VARCHAR,
-                base_currency VARCHAR,
-                list_date DATE,
-                primary_exchange VARCHAR,
-                shares_outstanding BIGINT,
-                total_employees BIGINT,
-                sic_code INT
-            )
-        """)
+                CREATE TABLE IF NOT EXISTS company_details (
+                    ticker VARCHAR PRIMARY KEY,
+                    name VARCHAR,
+                    market_cap BIGINT,
+                    active BOOLEAN,
+                    composite_figi VARCHAR,
+                    base_currency VARCHAR,
+                    list_date DATE,
+                    primary_exchange VARCHAR,
+                    shares_outstanding BIGINT,
+                    total_employees BIGINT,
+                    sic_code INT
+                )
+            """)
 
-        # Load each ticker's data
-        successful_loads = 0
-        for ticker, details in batch_data.items():
-            try:
-                self.db_connection.execute(
-                    """
-                    INSERT INTO company_details (ticker, name, market_cap, active, composite_figi, base_currency, list_date, primary_exchange,
-                    shares_outstanding, total_employees, sic_code)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        start_time = time.time()
+        self.logger.info(
+            f"Starting database insert for {len(batch_data)} company details..."
+        )
+
+        try:
+            # Convert batch_data dict to list of dicts for DataFrame
+            records = []
+            for ticker, details in batch_data.items():
+                records.append(
+                    {
+                        "ticker": ticker,
+                        "name": details.get("name"),
+                        "market_cap": details.get("market_cap"),
+                        "active": details.get("active"),
+                        "composite_figi": details.get("composite_figi"),
+                        "base_currency": details.get("currency_name"),
+                        "list_date": details.get("list_date"),
+                        "primary_exchange": details.get("primary_exchange"),
+                        "shares_outstanding": details.get(
+                            "share_class_shares_outstanding"
+                        ),
+                        "total_employees": details.get("total_employees"),
+                        "sic_code": details.get("sic_code"),
+                    }
+                )
+
+            # Convert to Polars DataFrame
+            df = pl.DataFrame(records)
+
+            # Bulk insert using DataFrame
+            self.db_connection.execute("""
+                    INSERT INTO company_details
+                    SELECT * FROM df
                     ON CONFLICT (ticker) DO UPDATE SET
                         name = EXCLUDED.name,
                         market_cap = EXCLUDED.market_cap,
@@ -142,29 +228,15 @@ class PolygonDataLoader:
                         shares_outstanding = EXCLUDED.shares_outstanding,
                         total_employees = EXCLUDED.total_employees,
                         sic_code = EXCLUDED.sic_code
-                """,
-                    (
-                        ticker,
-                        details.get("name"),
-                        details.get("market_cap"),
-                        details.get("active"),
-                        details.get("composite_figi"),
-                        details.get("currency_name"),
-                        details.get("list_date"),
-                        details.get("primary_exchange"),
-                        details.get("share_class_shares_outstanding"),
-                        details.get("total_employees"),
-                        details.get("sic_code"),
-                    ),
-                )
-                successful_loads += 1
-            except Exception as e:
-                self.logger.error(f"Failed to load {ticker}: {e}")
-                continue
+                """)
 
-        self.logger.info(
-            f"Batch load complete: {successful_loads}/{len(batch_data)} tickers loaded successfully"
-        )
+            elapsed = time.time() - start_time
+            self.logger.info(
+                f"Batch load complete: {len(records)} tickers loaded successfully in {elapsed:.2f}s"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to load batch ticker details: {e}")
+            raise
 
     def load_price_data(self, price_data: dict[str, list[dict]]):
         """
@@ -175,54 +247,63 @@ class PolygonDataLoader:
         """
         self.logger.info("Starting price data load")
 
-        # Delete Table to start fresh
-        # self.db_connection.execute("DROP TABLE IF EXISTS price_data")
-
         self.db_connection.execute("""
-            CREATE TABLE IF NOT EXISTS price_data (
-                ticker VARCHAR,
-                date TIMESTAMP,
-                open FLOAT,
-                high FLOAT,
-                low FLOAT,
-                close FLOAT,
-                volume BIGINT,
-                PRIMARY KEY (ticker, date)
-            )
-        """)
+                CREATE TABLE IF NOT EXISTS price_data (
+                    ticker VARCHAR,
+                    date TIMESTAMP,
+                    open FLOAT,
+                    high FLOAT,
+                    low FLOAT,
+                    close FLOAT,
+                    volume BIGINT,
+                    PRIMARY KEY (ticker, date)
+                )
+            """)
 
-        # Load price data for each ticker
+        start_time = time.time()
+
+        # Flatten the nested dict structure into a list of records
+        records = []
         for ticker, prices in price_data.items():
             for price in prices:
-                try:
-                    # Convert Unix timestamp (milliseconds) to TIMESTAMP
-                    timestamp_ms = price.get("timestamp")
+                records.append(
+                    {
+                        "ticker": ticker,
+                        "timestamp_ms": price.get("timestamp"),
+                        "open": price.get("open"),
+                        "high": price.get("high"),
+                        "low": price.get("low"),
+                        "close": price.get("close"),
+                        "volume": price.get("volume"),
+                    }
+                )
 
-                    self.db_connection.execute(
-                        """
-                        INSERT INTO price_data (ticker, date, open, high, low, close, volume)
-                        VALUES (?, epoch_ms(?), ?, ?, ?, ?, ?)
-                        ON CONFLICT (ticker, date) DO UPDATE SET
-                            open = EXCLUDED.open,
-                            high = EXCLUDED.high,
-                            low = EXCLUDED.low,
-                            close = EXCLUDED.close,
-                            volume = EXCLUDED.volume
-                    """,
-                        (
-                            ticker,
-                            timestamp_ms,
-                            price.get("open"),
-                            price.get("high"),
-                            price.get("low"),
-                            price.get("close"),
-                            price.get("volume"),
-                        ),
-                    )
-                except Exception as e:
-                    self.logger.error(
-                        f"Failed to load price data for {ticker} on {price.get('timestamp')}: {e}"
-                    )
-                    continue
+        self.logger.info(
+            f"Starting database insert for {len(records)} price records..."
+        )
 
-        self.logger.info("Price data load complete")
+        try:
+            # Convert to Polars DataFrame
+            df = pl.DataFrame(records)
+
+            # Bulk insert using DataFrame with timestamp conversion
+            self.db_connection.execute("""
+                    INSERT INTO price_data (ticker, date, open, high, low, close, volume)
+                    SELECT ticker, epoch_ms(timestamp_ms), open, high, low, close, volume
+                    FROM df
+                    ON CONFLICT (ticker, date) DO UPDATE SET
+                        open = EXCLUDED.open,
+                        high = EXCLUDED.high,
+                        low = EXCLUDED.low,
+                        close = EXCLUDED.close,
+                        volume = EXCLUDED.volume
+                """)
+
+            elapsed = time.time() - start_time
+            self.logger.info(
+                f"Price data load complete: {len(records)} records loaded in {elapsed:.2f}s"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Failed to load price data: {e}")
+            raise

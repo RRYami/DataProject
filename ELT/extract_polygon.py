@@ -88,9 +88,9 @@ class TickerDetailsExtractor:
         """
         self.client = client
 
-    def extract(self, ticker: str) -> dict[str, Any]:
+    def extract(self, ticker: str, type: str = "stocks") -> dict[str, Any]:
         """
-        Extract ticker details for a single ticker.
+        Extract ticker details for a single ticker (equity or indices).
 
         Args:
             ticker: Stock ticker symbol (e.g., 'AAPL', 'MSFT')
@@ -102,15 +102,97 @@ class TickerDetailsExtractor:
             Exception: If API request fails
         """
         logger.info(f"Extracting ticker details for: {ticker}")
+        match type.lower():
+            case "stocks":
+                try:
+                    details = self.client.get_ticker_details(ticker)
+                    data = details.__dict__.copy()
+                    logger.info(f"Successfully extracted data for {ticker}")
+                    logger.debug(f"Extracted fields: {list(data.keys())}")
+                except Exception as e:
+                    logger.error(f"Error extracting data for {ticker}: {e}")
+                    raise
+                return data
+            case "indices":
+                try:
+                    details = self.client.list_tickers(
+                        ticker=ticker, market="indices"
+                    )
+                    data = details.__dict__.copy()
+                    logger.info(f"Successfully extracted data for {ticker}")
+                    logger.debug(f"Extracted fields: {list(data.keys())}")
+                except Exception as e:
+                    logger.error(f"Error extracting data for {ticker}: {e}")
+                    raise
+                return data
+            case _:
+                logger.error(f"Unsupported ticker type: {type}")
+                raise ValueError(f"Unsupported ticker type: {type}")
+
+
+class TickerListExtractor:
+    """
+    Responsible for extracting the list of available tickers from Polygon API.
+
+    Single Responsibility: Ticker list extraction logic.
+    """
+
+    def __init__(self, client: RESTClient):
+        """
+        Initialize extractor with a Polygon client.
+
+        Args:
+            client: Initialized Polygon REST client
+        """
+        self.client = client
+
+    def extract(self, market: str = "indices") -> list[dict[str, Any]]:
+        """
+        Extract the list of available tickers for a given market.
+
+        Args:
+            market: Market type (e.g., 'stocks', 'indices')
+
+        Returns:
+            List of dicts containing ticker details
+
+        Raises:
+            Exception: If API request fails
+        """
+        logger.info(f"Extracting ticker list for market: {market}")
         try:
-            details = self.client.get_ticker_details(ticker)
-            data = details.__dict__.copy()
-            logger.info(f"Successfully extracted data for {ticker}")
-            logger.debug(f"Extracted fields: {list(data.keys())}")
+            tickers = self.client.list_tickers(
+                market=market, order="asc", limit=500, sort="ticker"
+            )
+            data = []
+            max_requests = 5
+            max_tickers = max_requests * 500  # 2,500 tickers
+
+            for ticker in tickers:
+                data.append(ticker.__dict__.copy())
+
+                # Stop after reaching max tickers
+                if len(data) >= max_tickers:
+                    logger.info(
+                        f"Reached limit of {max_tickers} tickers ({max_requests} requests)"
+                    )
+                    break
+
+                # Add delay after each page (every 500 tickers)
+                # Free tier: 5 requests/min = 12 seconds between requests
+                if len(data) % 500 == 0 and len(data) < max_tickers:
+                    logger.info(
+                        f"Fetched {len(data)} tickers, pausing 12s for rate limit..."
+                    )
+                    time.sleep(12)
+
+            logger.info(
+                f"Successfully extracted {len(data)} tickers for market: {market}"
+            )
+            return data
         except Exception as e:
-            logger.error(f"Error extracting data for {ticker}: {e}")
+            logger.error(f"Error extracting ticker list for {market}: {e}")
             raise
-        return data
 
 
 class BatchTickerExtractor:
@@ -404,6 +486,25 @@ class PolygonExtractorFactory:
 
         polygon_client = PolygonClient(api_key)
         return TickerDetailsExtractor(polygon_client.get_client())
+
+    @staticmethod
+    def create_ticker_list_extractor(
+        api_key: str | None = None,
+    ) -> TickerListExtractor:
+        """
+        Create a configured TickerListExtractor.
+
+        Args:
+            api_key: Optional API key. If None, will load from environment.
+
+        Returns:
+            Configured TickerListExtractor instance
+        """
+        if api_key is None:
+            api_key = ApiKeyProvider.get_api_key()
+
+        polygon_client = PolygonClient(api_key)
+        return TickerListExtractor(polygon_client.get_client())
 
     @staticmethod
     def create_batch_extractor(
