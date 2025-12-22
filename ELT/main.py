@@ -35,9 +35,7 @@ def run_pipeline() -> None:
     else:
         loggers.error("DB_PATH not found in environment variables")
         raise ValueError("DB_PATH not found in environment variables")
-    result = db_connection.execute(
-        "FROM company_details Join sic_to_naics on company_details.sic_code = sic_to_naics.sic_code"
-    ).pl()
+    result = db_connection.execute("FROM company_details").pl()
     # Convert result to Polars DataFrame for better visualization
     result.write_csv("result.csv")
     print(result["ticker"].to_list())
@@ -83,5 +81,25 @@ def run_pipeline() -> None:
     print(result)
 
 
+def test_yield() -> None:
+    db_path = os.getenv("DB_PATH")
+    if db_path is not None:
+        db_connection = ddb.connect(db_path)
+        db_connection.execute("DROP TABLE IF EXISTS tickers")
+    else:
+        loggers.error("DB_PATH not found in environment variables")
+        raise ValueError("DB_PATH not found in environment variables")
+    # extractor = ELT.extract_polygon.PolygonExtractorFactory.create_yield_data_extractor()
+    # apple_data = extractor.extract_all_yields("2024-01-01", "2024-12-30", 100)
+    # loader = ELT.load_polygon.PolygonDataLoader()
+    # loader.load_yield_data(apple_data)
+    result = db_connection.execute(
+        "SELECT * FROM treasury_yields WHERE date='2024-12-27'"
+    ).pl()
+    print(result)
+
+
 if __name__ == "__main__":
-    run_pipeline()
+    # run_pipeline()
+    test_yield()
+    pass

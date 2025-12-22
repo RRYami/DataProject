@@ -307,3 +307,97 @@ class PolygonDataLoader:
         except Exception as e:
             self.logger.error(f"Failed to load price data: {e}")
             raise
+
+    def load_yield_data(self, yield_data: list, curve_id: str = "US_TREASURY"):
+        """
+        Load treasury yield curve data into the database.
+
+        Args:
+            yield_data: List of TreasuryYield objects from the API
+            curve_id: Identifier for the yield curve (default: "US_TREASURY")
+        """
+        self.logger.info(f"Starting yield data load for curve: {curve_id}")
+
+        # Create table with curve_id to support multiple curves
+        self.db_connection.execute("""
+                CREATE TABLE IF NOT EXISTS treasury_yields (
+                    curve_id VARCHAR,
+                    date DATE,
+                    maturity VARCHAR,
+                    yield FLOAT,
+                    PRIMARY KEY (curve_id, date, maturity)
+                )
+            """)
+
+        start_time = time.time()
+
+        # Flatten the TreasuryYield objects into normalized records
+        records = []
+
+        # Define maturity mappings
+        maturity_fields = {
+            "yield_1_month": "1M",
+            "yield_3_month": "3M",
+            "yield_6_month": "6M",
+            "yield_1_year": "1Y",
+            "yield_2_year": "2Y",
+            "yield_3_year": "3Y",
+            "yield_5_year": "5Y",
+            "yield_7_year": "7Y",
+            "yield_10_year": "10Y",
+            "yield_20_year": "20Y",
+            "yield_30_year": "30Y",
+        }
+
+        for yield_obj in yield_data:
+            date = (
+                yield_obj.date
+                if hasattr(yield_obj, "date")
+                else yield_obj.get("date")
+            )
+
+            # Extract each maturity yield
+            for field_name, maturity_label in maturity_fields.items():
+                yield_value = (
+                    getattr(yield_obj, field_name, None)
+                    if hasattr(yield_obj, field_name)
+                    else yield_obj.get(field_name)
+                )
+
+                # Only add records where yield value is not None
+                if yield_value is not None:
+                    records.append(
+                        {
+                            "curve_id": curve_id,
+                            "date": date,
+                            "maturity": maturity_label,
+                            "yield": yield_value,
+                        }
+                    )
+
+        self.logger.info(
+            f"Starting database insert for {len(records)} yield records..."
+        )
+
+        try:
+            # Convert to Polars DataFrame
+            df = pl.DataFrame(records)
+
+            # Bulk insert using DataFrame
+            self.db_connection.execute("""
+                    INSERT INTO treasury_yields (curve_id, date, maturity, yield)
+                    SELECT curve_id, date, maturity, yield
+                    FROM df
+                    ON CONFLICT (curve_id, date, maturity) DO UPDATE SET
+                        yield = EXCLUDED.yield
+                """)
+
+            elapsed = time.time() - start_time
+            self.logger.info(
+                f"Yield data load complete for {curve_id}: "
+                f"{len(records)} records loaded in {elapsed:.2f}s"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Failed to load yield data: {e}")
+            raise

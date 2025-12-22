@@ -128,3 +128,77 @@ async def list_available_tickers() -> dict:
             pass
 
     return {"available_tickers": tickers}
+
+
+@app.get("/list_available_indices")
+async def list_available_indices() -> dict:
+    """
+    Return a list of all available indices in the tickers table.
+    """
+    db_path = os.getenv("DB_PATH")
+    if not db_path:
+        loggers.error("DB_PATH not found in environment variables")
+        raise HTTPException(
+            status_code=500, detail="Database path not configured"
+        )
+
+    conn = ddb.connect(db_path)
+    query = "FROM tickers"
+    try:
+        df = conn.execute(query).pl()
+    except Exception:
+        loggers.exception("Failed to query available indices")
+        raise HTTPException(status_code=500, detail="Database query failed")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return {"available_indices": df.to_dicts()}
+
+
+@app.post("/post_indice")
+async def post_indice(
+    indice: str,
+    name: str,
+    market: str,
+    locale: str,
+    active: bool,
+    source_feed: str,
+) -> dict:
+    """
+    Add a new indice to the tickers table.
+
+    Parameters:
+    - indice: The ticker symbol of the indice.
+    - name: The name of the indice.
+    - market: The market where the indice is listed.
+    - locale: The locale of the indice.
+    - active: Boolean indicating if the indice is active.
+    - source_feed: The source feed of the indice.
+
+    Returns:
+    Success message upon successful insertion.
+    """
+    db_path = os.getenv("DB_PATH")
+    if not db_path:
+        loggers.error("DB_PATH not found in environment variables")
+        raise HTTPException(
+            status_code=500, detail="Database path not configured"
+        )
+
+    conn = ddb.connect(db_path)
+    query = "INSERT INTO tickers (ticker, name, market, locale, active, source_feed) VALUES (?, ?, ?, ?, ?, ?)"
+    try:
+        conn.execute(query, (indice, name, market, locale, active, source_feed))
+    except Exception:
+        loggers.exception("Failed to insert new indice")
+        raise HTTPException(status_code=500, detail="Database insert failed")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return {"message": f"Indice {indice} added successfully"}

@@ -4,7 +4,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 from dotenv import load_dotenv
 from polygon import RESTClient
@@ -461,6 +461,189 @@ class PriceExtractor:
         return results
 
 
+class YieldDataExtractor:
+    """
+    Extract treasury yield data from Polygon API with rate limiting.
+
+    Single Responsibility: Treasury yield data extraction with rate limit handling.
+
+    Note: Treasury yields are economic data, not ticker-based stock data.
+    This class uses the /fed/v1/treasury-yields endpoint.
+    """
+
+    def __init__(
+        self,
+        client: RESTClient,
+        max_calls: int = 5,
+        time_window: int = 60,
+    ):
+        """
+        Initialize yield data extractor.
+
+        Args:
+            client: Initialized Polygon REST client
+            max_calls: Maximum API calls allowed (default: 5)
+            time_window: Time window in seconds (default: 60)
+        """
+        self.client = client
+        self.logger = get_logger(__name__)
+        self.max_calls = max_calls
+        self.time_window = time_window
+        self.call_timestamps = []
+
+    def _wait_if_needed(self):
+        """Wait if rate limit would be exceeded."""
+        now = time.time()
+
+        # Remove calls outside the time window
+        self.call_timestamps = [
+            ts for ts in self.call_timestamps if now - ts < self.time_window
+        ]
+
+        if len(self.call_timestamps) >= self.max_calls:
+            # Calculate how long to wait
+            oldest_call = self.call_timestamps[0]
+            wait_time = self.time_window - (now - oldest_call)
+
+            if wait_time > 0:
+                self.logger.info(
+                    f"Rate limit reached ({self.max_calls} calls/{self.time_window}s). "
+                    f"Waiting {wait_time:.2f} seconds..."
+                )
+                time.sleep(wait_time + 0.1)  # Add small buffer
+
+                # Clean up old calls after waiting
+                now = time.time()
+                self.call_timestamps = [
+                    ts
+                    for ts in self.call_timestamps
+                    if now - ts < self.time_window
+                ]
+
+        # Record this call
+        self.call_timestamps.append(time.time())
+
+    def extract_yields(
+        self,
+        date: str,
+        limit: int = 100,
+        sort: str = "date.desc",
+    ) -> list[dict]:
+        """
+        Extract treasury yield data for a date range.
+
+        Args:
+            start_date: Start date in YYYY-MM-DD format (optional)
+            end_date: End date in YYYY-MM-DD format (optional)
+            limit: Maximum number of records to return (default: 100)
+            sort: Sort order, e.g., 'date.asc' or 'date.desc' (default: 'date.asc')
+
+        Returns:
+            List of dictionaries containing treasury yield data for various maturities
+        """
+        # Wait if we're at rate limit
+        self._wait_if_needed()
+
+        self.logger.info(
+            f"Fetching treasury yields with params: {date}, limit={limit}, sort={sort}"
+        )
+
+        try:
+            # Use Polygon client's list_treasury_yields method
+            response = self.client.list_treasury_yields(
+                date=date,
+                limit=limit,
+                sort=sort,
+            )
+
+            results = []
+            for item in response:
+                # Each item contains yield rates for different maturities
+                results.append(item)
+
+            self.logger.info(
+                f"Successfully fetched {len(results)} treasury yield records"
+            )
+
+            return results
+
+        except Exception as e:
+            self.logger.error(f"Error fetching treasury yields: {e}")
+            return []
+
+    def extract_all_yields(
+        self,
+        start_date: Optional[str | None] = None,
+        end_date: Optional[str | None] = None,
+        batch_size: int = 1000,
+    ) -> list[dict]:
+        """
+        Extract all treasury yield data with pagination.
+
+        Args:
+            start_date: Start date in YYYY-MM-DD format (optional)
+            end_date: End date in YYYY-MM-DD format (optional)
+            batch_size: Number of records per API call (default: 1000)
+
+        Returns:
+            List of all treasury yield records
+        """
+        self.logger.info(
+            f"Starting full treasury yield extraction from {start_date or 'earliest'} "
+            f"to {end_date or 'latest'}"
+        )
+        start_time = time.time()
+
+        all_results = []
+
+        # Make the first request
+        params = {"limit": batch_size, "sort": "date.desc"}
+
+        if start_date:
+            params["date_gte"] = start_date
+        if end_date:
+            params["date_lte"] = end_date
+
+        try:
+            while True:
+                self._wait_if_needed()
+
+                self.logger.info(
+                    f"Fetching batch (total so far: {len(all_results)})"
+                )
+
+                response = self.client.list_treasury_yields(**params)  # type: ignore
+
+                batch = list(response)
+                if not batch:
+                    break
+
+                all_results.extend(batch)
+
+                # Check if we got fewer results than the limit (last page)
+                if len(batch) < batch_size:
+                    break
+
+                # Update the start date for pagination
+                last_date = batch[-1].get("date")
+                if last_date:
+                    params["date.gt"] = last_date
+                else:
+                    break
+
+            elapsed = time.time() - start_time
+            self.logger.info(
+                f"Treasury yield extraction complete: {len(all_results)} records "
+                f"in {elapsed:.1f}s"
+            )
+
+            return all_results
+
+        except Exception as e:
+            self.logger.error(f"Error in full treasury yield extraction: {e}")
+            return all_results
+
+
 class PolygonExtractorFactory:
     """
     Responsible for creating properly configured extractor instances.
@@ -543,7 +726,26 @@ class PolygonExtractorFactory:
         polygon_client = PolygonClient(api_key)
         return PriceExtractor(polygon_client.get_client())
 
+    @staticmethod
+    def create_yield_data_extractor(
+        api_key: str | None = None,
+    ) -> YieldDataExtractor:
+        """
+        Create a configured YieldDataExtractor.
 
-# extractor = PolygonExtractorFactory.create_ticker_extractor()
-# apple_data = extractor.extract('AAPL')
+        Args:
+            api_key: Optional API key. If None, will load from environment.
+
+        Returns:
+            Configured YieldDataExtractor instance
+        """
+        if api_key is None:
+            api_key = ApiKeyProvider.get_api_key()
+
+        polygon_client = PolygonClient(api_key)
+        return YieldDataExtractor(polygon_client.get_client())
+
+
+# extractor = PolygonExtractorFactory.create_yield_data_extractor()
+# apple_data = extractor.extract_yields(date="2023-06-01")
 # print(apple_data)
