@@ -89,14 +89,26 @@ def test_yield() -> None:
     else:
         loggers.error("DB_PATH not found in environment variables")
         raise ValueError("DB_PATH not found in environment variables")
-    # extractor = ELT.extract_polygon.PolygonExtractorFactory.create_yield_data_extractor()
-    # apple_data = extractor.extract_all_yields("2024-01-01", "2024-12-30", 100)
     # loader = ELT.load_polygon.PolygonDataLoader()
-    # loader.load_yield_data(apple_data)
+    # loader.load_curve_metadata(
+    #     curve_id=1,
+    #     name="US Treasury Yields",
+    #     currency="USD",
+    #     country="US",
+    #     description="United States Treasury nominal yields",
+    # )
+    # extractor = ELT.extract_polygon.PolygonExtractorFactory.create_yield_data_extractor()
+    # yields = extractor.extract_all_yields(
+    #     start_date="2024-01-01", end_date="2024-12-31"
+    # )
+
+    # loader.load_yield_data(yields, curve_id=1)
     result = db_connection.execute(
         "SELECT * FROM treasury_yields WHERE date='2024-12-27'"
     ).pl()
-    print(result)
+    result2 = db_connection.execute("FROM curves").pl()
+    print(result2.head(10))
+    print(result.head(10))
 
 
 if __name__ == "__main__":

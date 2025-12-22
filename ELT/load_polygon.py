@@ -2,6 +2,7 @@
 
 import os
 import time
+from typing import Optional
 
 import duckdb as ddb
 import polars as pl
@@ -308,24 +309,73 @@ class PolygonDataLoader:
             self.logger.error(f"Failed to load price data: {e}")
             raise
 
-    def load_yield_data(self, yield_data: list, curve_id: str = "US_TREASURY"):
+    def load_curve_metadata(
+        self,
+        curve_id: int,
+        name: str,
+        currency: str,
+        description: str,
+        country: Optional[str] = None,
+    ):
+        """
+        Load or update yield curve metadata.
+
+        Args:
+            curve_id: Unique identifier for the curve (e.g., 1 for US Treasury)
+            name: Display name (e.g., "US Treasury Yields")
+            currency: Currency code (e.g., "USD")
+            country: Optional country code (e.g., "US")
+            description: Optional longer description
+        """
+        self.logger.info(f"Loading curve metadata for curve_id: {curve_id}")
+
+        # Create curves dimension table
+        self.db_connection.execute("""
+                CREATE TABLE IF NOT EXISTS curves (
+                    curve_id INTEGER PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    currency VARCHAR NOT NULL,
+                    country VARCHAR,
+                    description VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+        # Insert or update curve metadata
+        self.db_connection.execute(
+            """
+                INSERT INTO curves (curve_id, name, currency, country, description)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (curve_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    currency = EXCLUDED.currency,
+                    country = EXCLUDED.country,
+                    description = EXCLUDED.description
+                """,
+            (curve_id, name, currency, country, description),
+        )
+
+        self.logger.info(f"Successfully loaded curve metadata: {name}")
+
+    def load_yield_data(self, yield_data: list, curve_id: int):
         """
         Load treasury yield curve data into the database.
 
         Args:
             yield_data: List of TreasuryYield objects from the API
-            curve_id: Identifier for the yield curve (default: "US_TREASURY")
+            curve_id: Integer identifier for the yield curve (must exist in curves table)
         """
-        self.logger.info(f"Starting yield data load for curve: {curve_id}")
+        self.logger.info(f"Starting yield data load for curve_id: {curve_id}")
 
-        # Create table with curve_id to support multiple curves
+        # Create treasury_yields fact table with foreign key
         self.db_connection.execute("""
                 CREATE TABLE IF NOT EXISTS treasury_yields (
-                    curve_id VARCHAR,
-                    date DATE,
-                    maturity VARCHAR,
+                    curve_id INTEGER NOT NULL,
+                    date DATE NOT NULL,
+                    maturity VARCHAR NOT NULL,
                     yield FLOAT,
-                    PRIMARY KEY (curve_id, date, maturity)
+                    PRIMARY KEY (curve_id, date, maturity),
+                    FOREIGN KEY (curve_id) REFERENCES curves(curve_id)
                 )
             """)
 
@@ -394,7 +444,7 @@ class PolygonDataLoader:
 
             elapsed = time.time() - start_time
             self.logger.info(
-                f"Yield data load complete for {curve_id}: "
+                f"Yield data load complete for curve_id {curve_id}: "
                 f"{len(records)} records loaded in {elapsed:.2f}s"
             )
 
