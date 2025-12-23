@@ -15,39 +15,29 @@ setup_logging()
 logger = get_logger(__name__)
 
 
-class ApiKeyProvider:
+def get_api_key(key_name: str = "API_KEY") -> str:
     """
-    Responsible for providing API keys from environment variables.
+    Retrieve API key from environment variables.
 
-    Single Responsibility: API key management and retrieval.
+    Args:
+        key_name: Name of the environment variable containing the API key
+
+    Returns:
+        API key string
+
+    Raises:
+        ValueError: If API key is not found in environment
     """
-
-    @staticmethod
-    def get_api_key(key_name: str = "API_KEY") -> str:
-        """
-        Retrieve API key from environment variables.
-
-        Args:
-            key_name: Name of the environment variable containing the API key
-
-        Returns:
-            API key string
-
-        Raises:
-            ValueError: If API key is not found in environment
-        """
-        try:
-            load_dotenv("./secret/.env")
-            api_key = os.getenv(key_name)
-            if api_key is None:
-                logger.warning(f"{key_name} not found in environment variables")
-                raise ValueError(
-                    f"{key_name} not found in environment variables"
-                )
-        except Exception as e:
-            logger.error(f"Error retrieving API key: {e}")
-            raise
-        return api_key
+    try:
+        load_dotenv("./secret/.env")
+        api_key = os.getenv(key_name)
+        if api_key is None:
+            logger.warning(f"{key_name} not found in environment variables")
+            raise ValueError(f"{key_name} not found in environment variables")
+    except Exception as e:
+        logger.error(f"Error retrieving API key: {e}")
+        raise
+    return api_key
 
 
 class PolygonClient:
@@ -665,7 +655,7 @@ class PolygonExtractorFactory:
             Configured TickerDetailsExtractor instance
         """
         if api_key is None:
-            api_key = ApiKeyProvider.get_api_key()
+            api_key = get_api_key()
 
         polygon_client = PolygonClient(api_key)
         return TickerDetailsExtractor(polygon_client.get_client())
@@ -684,7 +674,7 @@ class PolygonExtractorFactory:
             Configured TickerListExtractor instance
         """
         if api_key is None:
-            api_key = ApiKeyProvider.get_api_key()
+            api_key = get_api_key()
 
         polygon_client = PolygonClient(api_key)
         return TickerListExtractor(polygon_client.get_client())
@@ -721,7 +711,7 @@ class PolygonExtractorFactory:
             Configured PriceExtractor instance
         """
         if api_key is None:
-            api_key = ApiKeyProvider.get_api_key()
+            api_key = get_api_key()
 
         polygon_client = PolygonClient(api_key)
         return PriceExtractor(polygon_client.get_client())
@@ -740,7 +730,7 @@ class PolygonExtractorFactory:
             Configured YieldDataExtractor instance
         """
         if api_key is None:
-            api_key = ApiKeyProvider.get_api_key()
+            api_key = get_api_key()
 
         polygon_client = PolygonClient(api_key)
         return YieldDataExtractor(polygon_client.get_client())
