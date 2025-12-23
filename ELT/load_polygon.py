@@ -359,7 +359,8 @@ class PolygonDataLoader:
 
     def load_yield_data(self, yield_data: list, curve_id: int):
         """
-        Load treasury yield curve data into the database.
+        Load US treasury yield curve data into the database.
+        Note: Do not load as the data isn't formated for wide format (i.e. FRED format).
 
         Args:
             yield_data: List of TreasuryYield objects from the API

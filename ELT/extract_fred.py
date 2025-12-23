@@ -1,7 +1,6 @@
-import json
-from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
+import polars as pl
 import requests
 
 from get_api_keys import get_api_key
@@ -24,13 +23,13 @@ class FredExtractor:
 
     def get_series_observations(
         self,
-        series_id: str,
+        series_id: Union[list, str],
         observation_start: Optional[str] = None,
         observation_end: Optional[str] = None,
         frequency: Optional[str] = "d",
         file_type: Optional[str] = "json",
         limit: Optional[int] = 100000,
-    ) -> dict:
+    ) -> Union[dict, pl.DataFrame]:
         """
         Fetch series observations from FRED API.
 
@@ -49,6 +48,7 @@ class FredExtractor:
             "api_key": self.api_key,
             "file_type": file_type,
             "frequency": frequency,
+            "limit": limit,
         }
 
         if observation_start:
@@ -57,18 +57,57 @@ class FredExtractor:
             params["observation_end"] = observation_end
 
         try:
-            response = requests.get(BASE_URL, params=params)
-            response.raise_for_status()
-            data = response.json()
-            return data
+            if isinstance(series_id, list):
+                all_data = {}
+                for sid in series_id:
+                    params["series_id"] = sid
+                    response = requests.get(BASE_URL, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                    all_data[sid] = data
+                    data_dfs = {}
+                    for series, response in all_data.items():
+                        observations = response.get("observations", [])
+                        if observations:
+                            df = pl.DataFrame(observations).select(
+                                [
+                                    pl.col("date").str.to_date(
+                                        "%Y-%m-%d"
+                                    ),  # Convert to proper Date type
+                                    pl.col("value")
+                                    .replace(
+                                        ".", None
+                                    )  # "." means no data → null
+                                    .cast(pl.Float64)
+                                    .alias(series),  # Rename to series ID
+                                ]
+                            )
+                            data_dfs[series] = df
+
+                    # Long format
+                    long_list = []
+                    for series in data_dfs:
+                        long_list.append(
+                            data_dfs[series]
+                            .rename({series: "yield"})
+                            .with_columns(pl.lit(series).alias("maturity"))
+                        )
+
+                    long = pl.concat(long_list)
+
+                    # Pivot to wide
+                    combined = long.pivot(
+                        index="date",
+                        on="maturity",
+                        values="yield",
+                        aggregate_function=None,  # Or "first" if duplicates possible
+                    ).sort("date")
+                return combined
+            else:
+                response = requests.get(BASE_URL, params=params)
+                response.raise_for_status()
+                data = response.json()
+                return data
         except requests.RequestException as e:
             logger.error(f"Error fetching data from FRED API: {e}")
             raise
-
-
-if __name__ == "__main__":
-    extractor = FredExtractor()
-    series_data = extractor.get_series_observations(
-        series_id="GNPCA", file_type="json"
-    )
-    print(json.dumps(series_data, indent=2))

@@ -3,12 +3,14 @@ import time
 from logging import Logger
 
 import duckdb as ddb
+import polars as pl
 from dotenv import load_dotenv
 
-import ELT.extract_polygon
-import ELT.load_polygon
 import logger.logger as logger
 from ELT.extract_fred import FredExtractor
+from ELT.extract_polygon import PolygonExtractorFactory
+from ELT.load_fred import YieldLoader
+from ELT.load_polygon import PolygonDataLoader
 
 load_dotenv("./secret/.env")
 loggers: Logger = logger.get_logger(__name__)
@@ -43,10 +45,8 @@ def run_pipeline() -> None:
 
     time.sleep(60)
     # Example: Load Price Data
-    price_extractor = (
-        ELT.extract_polygon.PolygonExtractorFactory.create_price_extractor()
-    )
-    loader = ELT.load_polygon.PolygonDataLoader()
+    price_extractor = PolygonExtractorFactory.create_price_extractor()
+    loader = PolygonDataLoader()
     tickers_to_load: list[str] = result["ticker"].to_list()
     data = price_extractor.extract_range(
         tickers_to_load, "2025-01-01", "2025-10-28"
@@ -74,50 +74,48 @@ def run_pipeline() -> None:
     else:
         loggers.error("DB_PATH not found in environment variables")
         raise ValueError("DB_PATH not found in environment variables")
-    indices_list_extractor = ELT.extract_polygon.PolygonExtractorFactory.create_ticker_list_extractor()
-    indices_loader = ELT.load_polygon.PolygonDataLoader()
+    indices_list_extractor = (
+        PolygonExtractorFactory.create_ticker_list_extractor()
+    )
+    indices_loader = PolygonDataLoader()
     indices_loader.load_tickers(indices_list_extractor)
     result = db_connection.execute("FROM tickers").pl()
     result.write_csv("tickers_result.csv")
     print(result)
 
 
-def test_polygon_yield() -> None:
+def test_Fred_extractor() -> None:
+    extractor = FredExtractor()
+    maturities = ["DGS3MO", "DGS6MO", "DGS1", "DGS2", "DGS5", "DGS10", "DGS30"]
+
+    # Fetch raw data for all series (add date range if you want to limit data volume)
+    raw_data = extractor.get_series_observations(
+        series_id=maturities,
+        # observation_start="2000-01-01",  # Optional: uncomment to restrict range
+    )
+
+    # Latest curve
+    if isinstance(raw_data, pl.DataFrame):
+        latest_curve = raw_data.tail(10)
+    else:
+        raise ValueError("Expected Polars DataFrame from FRED extractor")
+
+    print("\nLatest US Treasury Yield Curve:")
+    print(latest_curve.select(["date"] + maturities))
+    loader = YieldLoader()
+    loader.load_yield_data(raw_data)
+    # Verify data load
     db_path = os.getenv("DB_PATH")
     if db_path is not None:
         db_connection = ddb.connect(db_path)
-        db_connection.execute("DROP TABLE IF EXISTS tickers")
     else:
         loggers.error("DB_PATH not found in environment variables")
         raise ValueError("DB_PATH not found in environment variables")
-    # loader = ELT.load_polygon.PolygonDataLoader()
-    # loader.load_curve_metadata(
-    #     curve_id=1,
-    #     name="US Treasury Yields",
-    #     currency="USD",
-    #     country="US",
-    #     description="United States Treasury nominal yields",
-    # )
-    # extractor = ELT.extract_polygon.PolygonExtractorFactory.create_yield_data_extractor()
-    # yields = extractor.extract_all_yields(
-    #     start_date="2024-01-01", end_date="2024-12-31"
-    # )
-
-    # loader.load_yield_data(yields, curve_id=1)
     result = db_connection.execute(
-        "SELECT * FROM treasury_yields WHERE date='2024-12-27'"
+        "FROM treasury_curves order by date desc"
     ).pl()
-    result2 = db_connection.execute("FROM curves").pl()
-    print(result2.head(10))
-    print(result.head(10))
-
-
-def test_Fred_extractor() -> None:
-    extractor = FredExtractor()
-    series_data = extractor.get_series_observations(
-        series_id="DGS3MO", observation_start="2025-10-01", file_type="json"
-    )
-    print(series_data)
+    print("\nData in treasury_curves table:")
+    print(result.head(10).select(["date"] + maturities))
 
 
 if __name__ == "__main__":
