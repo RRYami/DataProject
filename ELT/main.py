@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import ELT.extract_polygon
 import ELT.load_polygon
 import logger.logger as logger
+from ELT.extract_fred import FredExtractor
 
 load_dotenv("./secret/.env")
 loggers: Logger = logger.get_logger(__name__)
@@ -81,7 +82,7 @@ def run_pipeline() -> None:
     print(result)
 
 
-def test_yield() -> None:
+def test_polygon_yield() -> None:
     db_path = os.getenv("DB_PATH")
     if db_path is not None:
         db_connection = ddb.connect(db_path)
@@ -111,7 +112,16 @@ def test_yield() -> None:
     print(result.head(10))
 
 
+def test_Fred_extractor() -> None:
+    extractor = FredExtractor()
+    series_data = extractor.get_series_observations(
+        series_id="DGS3MO", observation_start="2025-10-01", file_type="json"
+    )
+    print(series_data)
+
+
 if __name__ == "__main__":
     # run_pipeline()
-    test_yield()
+    # test_polygon_yield()
+    test_Fred_extractor()
     pass
