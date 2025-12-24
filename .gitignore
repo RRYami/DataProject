@@ -13,3 +13,7 @@ secret/
 logs/
 *.csv
 *.duckdb
+.vscode/
+.vscode/
+.idea/
+.ruff_cache/
