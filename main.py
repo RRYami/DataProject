@@ -1,6 +1,6 @@
 import os
 from logging import Logger
-from typing import Union
+from typing import Optional, Union
 
 import duckdb as ddb
 from dotenv import load_dotenv
@@ -15,7 +15,7 @@ loggers: Logger = logger.get_logger(__name__)
 app = FastAPI()
 
 
-@app.get("/priceHistory/{ticker}")
+@app.get("/company/{ticker}/priceHistory")
 async def get_price_history(
     ticker: str,
     start_date: Union[str, None] = None,
@@ -202,3 +202,91 @@ async def post_indice(
             pass
 
     return {"message": f"Indice {indice} added successfully"}
+
+
+@app.get("/curves/US_treasury_yield")
+async def get_us_treasury_yield_curve(
+    date: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
+    latest_only: bool = False,
+) -> dict:
+    """
+    Return US Treasury yield curve data from the database.
+
+    Parameters:
+    - date: Optional specific date to query (format: YYYY-MM-DD)
+    - limit: Maximum number of records to return. If None, returns all records.
+    - offset: Number of records to skip for pagination (default: 0)
+    - latest_only: If True, returns only the most recent date's data (default: False)
+
+    Note: Requesting all records without a limit may return a large dataset.
+    Consider using pagination (limit/offset) for better performance.
+    """
+    db_path = os.getenv("DB_PATH")
+    if not db_path:
+        loggers.error("DB_PATH not found in environment variables")
+        raise HTTPException(
+            status_code=500, detail="Database path not configured"
+        )
+
+    conn = ddb.connect(db_path)
+
+    if date:
+        # Query specific date
+        query = """
+            SELECT *
+            FROM treasury_curves
+            WHERE date = ?
+        """
+        params = (date,)
+    elif latest_only:
+        # Query only the most recent date
+        query = """
+            SELECT *
+            FROM treasury_curves
+            WHERE date = (SELECT MAX(date) FROM treasury_curves)
+            ORDER BY date DESC
+        """
+        params = None
+    else:
+        # Query with optional pagination
+        query = """
+            SELECT *
+            FROM treasury_curves
+            ORDER BY date DESC
+        """
+        if limit is not None:
+            query += f" LIMIT {limit} OFFSET {offset}"
+        params = None
+
+    try:
+        df = conn.execute(query, params).pl()
+        data = df.to_dicts()
+
+        # Get total count for pagination info
+        if not date and limit is not None:
+            total_count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM treasury_curves"
+            ).pl()["cnt"][0]
+        else:
+            total_count = len(data)
+
+    except Exception:
+        loggers.exception("Failed to query US Treasury yield curve")
+        raise HTTPException(status_code=500, detail="Database query failed")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if not data:
+        raise HTTPException(status_code=404, detail="No yield curve data found")
+
+    return {
+        "results": data,
+        "count": len(data),
+        "total_count": total_count,
+        "offset": offset if limit is not None else 0,
+    }

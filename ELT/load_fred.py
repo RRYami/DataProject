@@ -23,7 +23,7 @@ class YieldLoader:
         """
         Load treasury yield curve data into DuckDB in wide format.
         Args:
-            yield_df: Polars DataFrame with columns [date, DGS3MO, DGS6MO, ..., DGS30]
+            yield_df: Polars DataFrame with columns [date, DGS1MO, DGS3MO, DGS6MO, ..., DGS30]
             table_name: Name of the table to store the data
         """
         self.logger.info(f"Starting yield data load into {table_name}")
@@ -32,6 +32,7 @@ class YieldLoader:
         self.db_connection.execute("""
             CREATE TABLE IF NOT EXISTS treasury_curves (
                 date DATE PRIMARY KEY,
+                DGS1MO FLOAT,
                 DGS3MO FLOAT,
                 DGS6MO FLOAT,
                 DGS1 FLOAT,
@@ -50,10 +51,11 @@ class YieldLoader:
 
             # Insert data, updating on conflict
             self.db_connection.execute("""
-                INSERT INTO treasury_curves (date, DGS3MO, DGS6MO, DGS1, DGS2, DGS5, DGS10, DGS30)
-                SELECT date, DGS3MO, DGS6MO, DGS1, DGS2, DGS5, DGS10, DGS30
+                INSERT INTO treasury_curves (date, DGS1MO, DGS3MO, DGS6MO, DGS1, DGS2, DGS5, DGS10, DGS30)
+                SELECT date, DGS1MO, DGS3MO, DGS6MO, DGS1, DGS2, DGS5, DGS10, DGS30
                 FROM yield_df
                 ON CONFLICT (date) DO UPDATE SET
+                    DGS1MO = EXCLUDED.DGS1MO,
                     DGS3MO = EXCLUDED.DGS3MO,
                     DGS6MO = EXCLUDED.DGS6MO,
                     DGS1 = EXCLUDED.DGS1,

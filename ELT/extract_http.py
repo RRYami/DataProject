@@ -1,3 +1,5 @@
+"""TODO: refactor everything. This was used in another project and needs to be adapted properly."""
+
 import json
 import os
 from datetime import datetime
