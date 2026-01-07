@@ -1,5 +1,6 @@
 import os
-import time
+
+# import time
 from logging import Logger
 
 import duckdb as ddb
@@ -128,7 +129,7 @@ def test_Fred_extractor() -> None:
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    # run_pipeline()
     # test_polygon_yield()
-    # test_Fred_extractor()
+    test_Fred_extractor()
     pass

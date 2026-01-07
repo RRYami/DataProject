@@ -4,17 +4,19 @@ A comprehensive Python-based ELT (Extract, Load, Transform) pipeline with a Fast
 
 ## Overview
 
-This project provides a modular system for extracting financial data, loading it into a DuckDB analytical database, and exposing it through a RESTful API. Key features include:
+This project provides a modular system for extracting financial data, loading it into a DuckDB analytical database, and exposing it through a professional RESTful API. Key features include:
 
 - 🔄 **Multi-Source ELT Pipeline**: Extract data from Polygon.io and FRED APIs
 - 💾 **DuckDB Storage**: Efficient analytical database for financial data
-- 🌐 **FastAPI REST API**: Query financial data via HTTP endpoints
+- 🌐 **FastAPI REST API**: Modular router architecture with domain-separated endpoints
 - 📊 **Batch Processing**: Support for single or batch ticker extraction
-- 📈 **Price History**: Store and retrieve historical stock prices
-- 📉 **Treasury Yield Curves**: US Treasury yield data from FRED
+- 📈 **Price History**: Store and retrieve historical stock prices with date range filtering
+- 📉 **Treasury Yield Curves**: US Treasury yield data from FRED with flexible date queries
 - 📝 **Comprehensive Logging**: JSON-formatted logging with queue-based handlers
-- 🏗️ **Factory Pattern**: Clean architecture with factory pattern for extractor creation
+- 🏗️ **Clean Architecture**: Factory pattern, dependency injection, and single responsibility
 - 🔗 **Industry Classification**: SIC to NAICS code mapping for industry analysis
+- 🎯 **Professional Structure**: Organized API routers, Pydantic models, and shared dependencies
+- 📚 **Auto Documentation**: Interactive Swagger UI and ReDoc with organized domain tags
 
 ## Features
 
@@ -32,44 +34,61 @@ This project provides a modular system for extracting financial data, loading it
 - Optimized indexing for fast queries
 
 ### REST API
+- **Modular Router Architecture**: Endpoints organized by domain (companies, tickers, treasury)
 - **Company Lookup**: Get company details by ticker symbol
-- **Price History**: Query historical prices with date filtering
-- **Treasury Curves**: Access US Treasury yield curve data
-- **Ticker Management**: List and add indices/tickers
-- **Interactive Documentation**: Built-in Swagger UI and ReDoc
+- **Price History**: Query historical prices with flexible date range filtering
+- **Treasury Curves**: Access US Treasury yield curve data with start_date/end_date support
+- **Ticker Management**: List and add indices/tickers with Pydantic validation
+- **Interactive Documentation**: Built-in Swagger UI and ReDoc with domain tags
+- **Health Checks**: Built-in health check and API info endpoints
+- **CORS Support**: Configured CORS middleware for cross-origin requests
 
 ## Project Structure
 
 ```
 DataProject/
-├── ELT/
-│   ├── __init__.py
-│   ├── extract_polygon.py     # Polygon.io data extraction
-│   ├── extract_fred.py        # FRED API data extraction
-│   ├── extract_http.py        # Alpha Vantage fundamentals (legacy)
-│   ├── load_polygon.py        # Load data into DuckDB
-│   ├── load_fred.py           # Load FRED data into DuckDB
-│   └── main.py                # ELT pipeline examples
-├── database/
-│   ├── polygon.duckdb         # DuckDB database file
-│   ├── classification_table.py # SIC/NAICS table management
-│   ├── clean_db.py            # Database cleanup utilities
-│   ├── indexing.sql           # Database index definitions
-│   └── run.sql                # SQL helper scripts
-├── data/
-│   └── sic_naics.parquet      # SIC to NAICS mapping data
-├── log_config/
-│   └── config.json            # Logging configuration
-├── logger/
-│   ├── __init__.py
-│   └── logger.py              # Custom logging setup
-├── logs/                      # Application logs directory
-├── secret/
-│   └── .env                   # Environment variables (API keys, DB path)
-├── get_api_keys.py            # Centralized API key management
 ├── main.py                    # FastAPI application entry point
-├── pyproject.toml             # Project dependencies
-└── README.md                  # This file
+├── main_backup.py             # Backup of legacy main.py
+├── api/                       # FastAPI API layer (modular structure)
+│   ├── __init__.py
+│   ├── dependencies.py        # Shared dependencies (DB connections, etc.)
+│   ├── routers/              # Domain-specific API routers
+│   │   ├── __init__.py
+│   │   ├── companies.py      # Company & price history endpoints
+│   │   ├── tickers.py        # Ticker/indices management endpoints
+│   │   └── treasury.py       # Treasury yield curve endpoints
+│   └── models/               # Pydantic models for request/response
+│       ├── __init__.py
+│       └── ticker.py         # Ticker data models
+├── ELT/                      # Extract, Load, Transform pipeline
+│   ├── __init__.py
+│   ├── extract_polygon.py    # Polygon.io data extraction
+│   ├── extract_fred.py       # FRED API data extraction
+│   ├── extract_http.py       # Alpha Vantage fundamentals (legacy)
+│   ├── load_polygon.py       # Load data into DuckDB
+│   ├── load_fred.py          # Load FRED data into DuckDB
+│   └── main.py               # ELT pipeline examples
+├── database/                 # Database files and utilities
+│   ├── polygon.duckdb        # DuckDB database file
+│   ├── classification_table.py # SIC/NAICS table management
+│   ├── clean_db.py           # Database cleanup utilities
+│   ├── indexing.sql          # Database index definitions
+│   └── run.sql               # SQL helper scripts
+├── data/                     # Static data files
+│   └── sic_naics.parquet     # SIC to NAICS mapping data
+├── log_config/               # Logging configuration
+│   └── config.json
+├── logger/                   # Custom logging implementation
+│   ├── __init__.py
+│   └── logger.py
+├── logs/                     # Application logs directory
+├── secret/                   # Sensitive configuration
+│   └── .env                  # Environment variables (API keys, DB path)
+├── get_api_keys.py           # Centralized API key management
+├── pyproject.toml            # Project dependencies and configuration
+├── AGENTS.md                 # Development guidelines for AI agents
+├── API_STRUCTURE.md          # Detailed API structure documentation
+└── README.md                 # This file
 ```
 
 ## Requirements
@@ -141,16 +160,40 @@ The logging system uses a queue-based handler for thread-safe logging. Configura
 
 Start the FastAPI REST service from the project root:
 
+**Using UV (recommended):**
+```bash
+uv run fastapi dev main.py
+```
+
+**Or using uvicorn directly:**
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The API will be available at:
 - **Base URL**: http://127.0.0.1:8000
+- **Root Endpoint**: http://127.0.0.1:8000/ (API info)
+- **Health Check**: http://127.0.0.1:8000/health
 - **Interactive Docs (Swagger UI)**: http://127.0.0.1:8000/docs
 - **Alternative Docs (ReDoc)**: http://127.0.0.1:8000/redoc
 
 ### API Endpoints
+
+The API is now organized into modular routers by domain. All endpoints are documented in the interactive Swagger UI at `/docs`.
+
+#### Root & Health
+
+**Root Endpoint**
+```
+GET /
+```
+Returns API information and documentation links.
+
+**Health Check**
+```
+GET /health
+```
+Returns API health status.
 
 #### 1. Get Company Details
 ```
@@ -215,20 +258,32 @@ curl "http://127.0.0.1:8000/company/AAPL/priceHistory?start_date=2024-01-01&end_
 
 #### 3. Get US Treasury Yield Curve
 ```
-GET /curves/US_treasury_yield?date=YYYY-MM-DD&limit=100&offset=0&latest_only=false
+GET /curves/US_treasury_yield?date=YYYY-MM-DD&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&limit=100&offset=0&latest_only=false
 ```
 
-Returns US Treasury yield curve data from FRED.
+Returns US Treasury yield curve data from FRED with flexible date filtering.
 
 **Query Parameters:**
-- `date`: Specific date (optional)
+- `date`: Specific date (optional, takes precedence)
+- `start_date`: Start date for range query (optional)
+- `end_date`: End date for range query (optional)
 - `limit`: Maximum records to return (optional)
 - `offset`: Pagination offset (default: 0)
 - `latest_only`: Return only most recent data (default: false)
 
-**Example:**
+**Examples:**
 ```bash
+# Get latest yield curve
 curl "http://127.0.0.1:8000/curves/US_treasury_yield?latest_only=true"
+
+# Get yield curve for date range
+curl "http://127.0.0.1:8000/curves/US_treasury_yield?start_date=2024-01-01&end_date=2024-12-31"
+
+# Get all data from a specific date onwards
+curl "http://127.0.0.1:8000/curves/US_treasury_yield?start_date=2024-06-01"
+
+# Get paginated results
+curl "http://127.0.0.1:8000/curves/US_treasury_yield?limit=100&offset=0"
 ```
 
 **Response:**
@@ -255,40 +310,59 @@ curl "http://127.0.0.1:8000/curves/US_treasury_yield?latest_only=true"
 
 #### 4. List Available Tickers
 ```
-GET /list_available_tickers
+GET /company/list/available_tickers
 ```
 
 Returns all tickers stored in the database.
 
 **Example:**
 ```bash
-curl http://127.0.0.1:8000/list_available_tickers
+curl http://127.0.0.1:8000/company/list/available_tickers
 ```
 
 #### 5. List Available Indices
 ```
-GET /list_available_indices
+GET /tickers/indices/available
 ```
 
 Returns all indices/tickers metadata.
 
-#### 6. Add New Indice
-```
-POST /post_indice
+**Example:**
+```bash
+curl http://127.0.0.1:8000/tickers/indices/available
 ```
 
-Add a new indice to the tickers table.
+#### 6. Add New Indice
+```
+POST /tickers/indices
+```
+
+Add a new indice to the tickers table. Uses Pydantic model validation.
 
 **Request Body:**
 ```json
 {
-  "indice": "SPY",
-  "name": "SPDR S&P 500 ETF Trust",
-  "market": "stocks",
+  "indice": "SPX",
+  "name": "S&P 500 Index",
+  "market": "indices",
   "locale": "us",
   "active": true,
   "source_feed": "polygon"
 }
+```
+
+**Example:**
+```bash
+curl -X POST "http://127.0.0.1:8000/tickers/indices" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "indice": "SPX",
+    "name": "S&P 500 Index",
+    "market": "indices",
+    "locale": "us",
+    "active": true,
+    "source_feed": "polygon"
+  }'
 ```
 
 ### Running the ELT Pipeline
@@ -432,13 +506,25 @@ print(result)
 ### Design Patterns
 
 - **Factory Pattern**: `PolygonExtractorFactory` creates appropriate extractor instances
-- **Single Responsibility Principle**: Each class has one clear purpose
-- **Dependency Injection**: Extractors are injected into loaders
-- **Separation of Concerns**: Clear separation between extraction, loading, and API layers
+- **Single Responsibility Principle**: Each class/module has one clear purpose
+- **Dependency Injection**: Used throughout API routers and extractors
+- **Separation of Concerns**: Clear layers for extraction, loading, and API
+- **Modular Router Architecture**: API endpoints organized by domain
 
 ### Key Components
 
-#### Extraction Layer
+#### API Layer (NEW Modular Structure)
+1. **FastAPI Application** (`main.py`): Entry point with router registration
+2. **Routers** (`api/routers/`):
+   - `companies.py`: Company details and price history endpoints
+   - `tickers.py`: Ticker/indices management endpoints
+   - `treasury.py`: Treasury yield curve endpoints
+3. **Dependencies** (`api/dependencies.py`): Shared DB connections and utilities
+4. **Models** (`api/models/`): Pydantic models for validation and documentation
+5. **Error Handling**: Proper HTTP status codes and error messages
+6. **Auto-generated Documentation**: Swagger UI and ReDoc with domain tags
+
+#### Extraction Layer (ELT)
 1. **ApiKeyProvider**: Centralized API key retrieval from environment
 2. **PolygonClient**: Wrapper for Polygon.io API client
 3. **TickerDetailsExtractor**: Extracts single ticker data
@@ -447,15 +533,10 @@ print(result)
 6. **FredExtractor**: Extracts economic data from FRED API
 7. **YieldDataExtractor**: Extracts treasury yield data
 
-#### Loading Layer
+#### Loading Layer (ELT)
 1. **PolygonDataLoader**: Loads company and price data into DuckDB
 2. **YieldLoader**: Loads treasury yield data into DuckDB
 3. Automatic schema creation and conflict resolution
-
-#### API Layer
-1. **FastAPI Application**: RESTful API with automatic documentation
-2. **Error Handling**: Proper HTTP status codes and error messages
-3. **Query Optimization**: Efficient database queries with filtering
 
 #### Logging Layer
 1. **Custom Logger**: JSON formatter with queue-based handling
@@ -466,11 +547,20 @@ print(result)
 
 ### Code Quality
 
-The project uses Ruff for linting with an 80-character line length limit:
+The project uses Ruff for linting and formatting with an 80-character line length limit:
 
 ```bash
-ruff check .
+# Check for linting issues
+uv run ruff check .
+
+# Auto-fix linting issues
+uv run ruff check . --fix
+
+# Format code
+uv run ruff format .
 ```
+
+See `AGENTS.md` for comprehensive development guidelines.
 
 ### Database Management
 
@@ -488,9 +578,14 @@ python -m database.clean_db
 
 1. **New Extractor**: Add to `ELT/extract_*.py` and register in factory
 2. **New Loader**: Add to `ELT/load_*.py` with schema creation
-3. **New Endpoint**: Add to `main.py` with proper error handling
+3. **New API Endpoint**: 
+   - Add to appropriate router in `api/routers/` (or create new router)
+   - Define Pydantic models in `api/models/` if needed
+   - Register new router in `main.py` if created
 4. **Update Schema**: Modify table definitions and run migrations
 5. **Add Logging**: Use the logger for observability
+
+See `API_STRUCTURE.md` for detailed information about the API architecture.
 
 ## Troubleshooting
 

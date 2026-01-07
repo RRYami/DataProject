@@ -1,136 +1,91 @@
 # AGENTS.md - Development Guidelines for AI Coding Agents
 
-## Overview
-
-This document provides comprehensive guidelines for AI coding agents working on the DataProject codebase. Follow these conventions to maintain code quality, consistency, and functionality.
-
 ## Build, Lint, and Test Commands
 
 ### Package Management
 ```bash
-# Install dependencies (preferred)
-uv sync
-
-# Alternative with pip
-pip install -e .
+uv sync                    # Install dependencies
+uv add <package>           # Add dependency
+uv run fastapi dev main.py # Start dev server
 ```
 
-### Linting and Code Quality
+### Linting and Formatting
 ```bash
-# Run linting and formatting checks
-ruff check .
-
-# Auto-fix linting issues
-ruff check . --fix
-
-# Format code
-ruff format .
-```
-
-### Running the Application
-```bash
-# Start FastAPI development server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# Production deployment
-uvicorn main:app --host 0.0.0.0 --port 8000
+uv run ruff check .        # Check linting
+uv run ruff check . --fix  # Auto-fix issues
+uv run ruff format .       # Format code
 ```
 
 ### Testing
 ```bash
-# Run all tests (if pytest is configured)
-pytest
-
-# Run tests for specific module
-pytest tests/test_module.py
-
-# Run single test
-pytest tests/test_module.py::test_function_name
-
-# Run tests with coverage
-pytest --cov=src --cov-report=html
+uv run pytest                              # Run all tests
+uv run pytest tests/test_module.py         # Run specific file
+uv run pytest tests/test_module.py::test_name  # Run single test
+uv run pytest --cov=. --cov-report=html    # With coverage
 ```
 
 ### Database Operations
 ```bash
-# Initialize classification tables
-python -m database.classification_table
-
-# Clean database
-python -m database.clean_db
-
-# Run SQL scripts
-python database/run.sql
+uv run python -m database.classification_table  # Init tables
+uv run python -m database.clean_db              # Clean DB
 ```
+
+---
 
 ## Code Style Guidelines
 
-### Python Version and Dependencies
-- **Python Version**: >= 3.13
-- **Package Manager**: UV (preferred) or pip
-- **Line Length**: 80 characters (enforced by ruff)
-- **Type Hints**: Required for all function parameters and return values
+### Configuration
+- **Python**: >= 3.13
+- **Line Length**: 80 characters (ruff)
+- **Type Hints**: Required for all public functions
+- **Docstrings**: Google style for all public functions/classes
 
-### Import Organization
+### Import Order
 ```python
-# Standard library imports
+# 1. Standard library (alphabetical)
 import json
-import logging
 import os
 from pathlib import Path
 from typing import Any, Optional, Union
 
-# Third-party imports (alphabetical)
+# 2. Third-party (alphabetical)
 import duckdb as ddb
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from polars import DataFrame
+import polars as pl
+from fastapi import APIRouter, Depends, HTTPException
 
-# Local imports (relative)
-from logger.logger import get_logger, setup_logging
-import logger.logger as logger
+# 3. Local imports
+from api.dependencies import get_db_connection
+from logger.logger import get_logger
 ```
 
 ### Naming Conventions
+- **Classes**: `PascalCase` → `PolygonClient`, `TickerDetailsExtractor`
+- **Functions/Methods**: `snake_case` → `get_price_history`, `load_data`
+- **Variables**: `snake_case` → `ticker_symbol`, `start_date`
+- **Constants**: `UPPER_SNAKE_CASE` → `MAX_RETRIES`, `API_BASE_URL`
+- **Private**: `_prefix` → `_load_checkpoint`, `_api_key`
+- **Files**: `snake_case` → `extract_polygon.py`, `companies.py`
 
-#### Classes
-- **PascalCase**: `PolygonClient`, `TickerDetailsExtractor`, `BatchTickerExtractor`
-- Single responsibility principle - each class has one clear purpose
-- Factory pattern: `PolygonExtractorFactory`
-
-#### Functions and Methods
-- **snake_case**: `get_price_history`, `extract_ticker_details`, `load_price_data`
-- Descriptive names that indicate purpose
-- Private methods: `_load_checkpoint`, `_save_checkpoint`
-
-#### Variables
-- **snake_case**: `api_key`, `ticker_symbol`, `start_date`
-- Descriptive names, avoid single letters except in loops
-- Constants: `UPPER_SNAKE_CASE`
-
-#### Files and Modules
-- **snake_case**: `extract_polygon.py`, `load_fred.py`, `main.py`
-- Clear, descriptive names
-
-### Type Hints
+### Type Hints (Required)
 ```python
-# Function signatures
 def get_price_history(
     ticker: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-) -> dict[str, Any]:
+) -> dict:
+    """Brief description."""
+    pass
 
-# Complex types
-from typing import Union, Optional, dict, list
+# Use Union or | for multiple types
+def process(data: Union[list, dict]) -> list[dict[str, Any]]:
+    pass
 
-def process_data(
-    data: Union[list[dict[str, Any]], dict[str, Any]],
-    config: Optional[dict[str, str]] = None
-) -> list[dict[str, Any]]:
+# Factory pattern with type hints
+def create_extractor(api_key: str | None = None) -> TickerDetailsExtractor:
+    pass
 ```
 
-### Docstrings
+### Docstrings (Google Style)
 ```python
 def extract_ticker_details(
     self,
@@ -141,147 +96,18 @@ def extract_ticker_details(
     Extract ticker details for a single ticker.
 
     Args:
-        ticker: Stock ticker symbol (e.g., 'AAPL', 'MSFT')
+        ticker: Stock ticker symbol (e.g., 'AAPL')
         type: Type of ticker ('stocks' or 'indices')
 
     Returns:
-        dict containing raw ticker details from the API
+        dict containing raw ticker details from API
 
     Raises:
         Exception: If API request fails
     """
 ```
 
-### Error Handling
-```python
-try:
-    # Operation that might fail
-    result = client.get_ticker_details(ticker)
-    logger.info(f"Successfully extracted data for {ticker}")
-except Exception as e:
-    logger.error(f"Error extracting data for {ticker}: {e}")
-    raise  # Re-raise or handle appropriately
-finally:
-    # Cleanup operations
-    if 'conn' in locals():
-        conn.close()
-```
-
-### Logging
-- Use structured logging with appropriate levels
-- Include contextual information
-- Use the custom logger setup
-
-```python
-from logger.logger import get_logger, setup_logging
-
-setup_logging()
-logger = get_logger(__name__)
-
-logger.info(f"Processing {len(tickers)} tickers")
-logger.debug(f"Extracted fields: {list(data.keys())}")
-logger.error(f"Failed to extract {ticker}: {e}")
-logger.warning(f"Skipping {ticker} due to error: {e}")
-```
-
-### Database Operations
-```python
-# Use parameterized queries to prevent SQL injection
-query = """
-    SELECT *
-    FROM price_data
-    WHERE UPPER(ticker) = UPPER(?)
-"""
-params = [ticker]
-
-# Always close connections in finally blocks
-conn = ddb.connect(db_path)
-try:
-    df = conn.execute(query, params).pl()
-    return df.to_dicts()
-finally:
-    conn.close()
-```
-
-### API Design (FastAPI)
-```python
-@app.get("/company/{ticker}")
-async def get_company(ticker: str) -> dict:
-    """
-    Return company details for the given ticker.
-    """
-    # Validate inputs
-    if not ticker:
-        raise HTTPException(status_code=400, detail="Ticker is required")
-
-    # Handle business logic with proper error handling
-    try:
-        # ... implementation
-    except Exception as e:
-        logger.exception("Failed to query company details")
-        raise HTTPException(status_code=500, detail="Database query failed")
-```
-
-### Environment Configuration
-- Use `.env` files for sensitive configuration
-- Load with `python-dotenv`
-- Never commit sensitive data
-
-```python
-from dotenv import load_dotenv
-import os
-
-load_dotenv("./secret/.env")
-
-db_path = os.getenv("DB_PATH")
-api_key = os.getenv("POLYGON_API_KEY")
-
-if not db_path:
-    raise ValueError("DB_PATH environment variable is required")
-```
-
-### Path Handling
-```python
-from pathlib import Path
-
-# Use pathlib for cross-platform compatibility
-root_path = Path(__file__).parent.parent
-log_dir = root_path / "logs"
-log_dir.mkdir(exist_ok=True)
-
-config_path = root_path / "log_config" / "config.json"
-```
-
-### Control Flow
-- Use `match/case` for pattern matching (Python 3.10+)
-- Prefer explicit conditions over implicit
-
-```python
-match ticker_type.lower():
-    case "stocks":
-        # Handle stocks
-        pass
-    case "indices":
-        # Handle indices
-        pass
-    case _:
-        raise ValueError(f"Unsupported ticker type: {ticker_type}")
-```
-
-### Data Processing
-- Use Polars for DataFrame operations (preferred over pandas)
-- Leverage DuckDB for analytical queries
-- Handle data types explicitly
-
-```python
-import polars as pl
-
-# Convert DuckDB result to Polars DataFrame
-df = conn.execute(query, params).pl()
-
-# Process data
-data = df.to_dicts()
-```
+---
 
 ## Architecture Patterns
 
@@ -289,62 +115,46 @@ data = df.to_dicts()
 ```python
 class PolygonExtractorFactory:
     @staticmethod
-    def create_ticker_extractor(api_key: str | None = None) -> TickerDetailsExtractor:
+    def create_ticker_extractor(api_key: str | None = None):
         if api_key is None:
             api_key = get_api_key()
-        polygon_client = PolygonClient(api_key)
-        return TickerDetailsExtractor(polygon_client.get_client())
+        client = PolygonClient(api_key)
+        return TickerDetailsExtractor(client.get_client())
 ```
 
-### Single Responsibility Principle
-- Each class should have one reason to change
-- Separate extraction, loading, and API concerns
-- Clear separation between data access and business logic
-
-### Dependency Injection
+### Dependency Injection (FastAPI)
 ```python
-# Inject extractors into loaders
-def __init__(self, extractor: TickerDetailsExtractor):
-    self.extractor = extractor
+@router.get("/{ticker}")
+async def get_company(
+    ticker: str,
+    conn: ddb.DuckDBPyConnection = Depends(get_db_connection),
+) -> dict:
+    pass
 ```
 
-## Security Best Practices
+### Single Responsibility
+- `PolygonClient` → API connection only
+- `TickerDetailsExtractor` → Extract data only
+- `PolygonDataLoader` → Load to DB only
 
-- ✅ Store API keys in `.env` files, never in code
-- ✅ Use parameterized queries to prevent SQL injection
-- ✅ Validate all inputs
-- ✅ Log errors without exposing sensitive information
-- ✅ Use HTTPS in production
-- ⚠️ Implement authentication for production APIs
+---
 
-## File Structure Conventions
+## FastAPI Guidelines
 
-```
-DataProject/
-├── ELT/                    # Extract, Load, Transform operations
-│   ├── extract_*.py       # Data extraction logic
-│   ├── load_*.py          # Data loading logic
-│   └── main.py            # ELT orchestration
-├── database/              # Database utilities and schemas
-├── log_config/            # Logging configuration
-├── logger/                # Custom logging implementation
-├── data/                  # Static data files
-├── secret/                # Environment variables (.env)
-├── main.py                # FastAPI application
-└── pyproject.toml         # Project configuration
+### Router Structure
+```python
+router = APIRouter(
+    prefix="/company",
+    tags=["companies"],
+    responses={404: {"description": "Not found"}},
+)
+
+@router.get("/{ticker}/priceHistory")
+async def get_price_history(...) -> dict:
+    """Endpoint docstring."""
 ```
 
-## Development Workflow
-
-1. **Before starting work**: Run `ruff check .` to ensure clean baseline
-2. **During development**: Use type hints and follow naming conventions
-3. **Before committing**: Run full linting and formatting
-4. **Testing**: Run relevant tests and verify functionality
-5. **Logging**: Add appropriate log statements for debugging
-
-## Common Patterns in This Codebase
-
-### API Response Format
+### Response Format
 ```python
 return {
     "ticker": ticker.upper(),
@@ -354,42 +164,128 @@ return {
 }
 ```
 
-### Batch Processing with Rate Limiting
+### Error Handling
 ```python
-batch_size = 5  # API rate limit
-for i in range(0, len(items), batch_size):
-    batch = items[i:i + batch_size]
-    # Process batch
-    time.sleep(60)  # Rate limit delay
+try:
+    df = conn.execute(query, params).pl()
+    data = df.to_dicts()
+except Exception:
+    loggers.exception("Failed to query")
+    raise HTTPException(status_code=500, detail="Query failed")
+
+if not data:
+    raise HTTPException(status_code=404, detail="Not found")
 ```
 
-### Checkpoint/Restart Logic
+---
+
+## Database Patterns
+
+### DuckDB Connection
 ```python
-# Save progress for resumable operations
-checkpoint_data = self._load_checkpoint(checkpoint_file)
-# ... processing logic ...
-self._save_checkpoint(checkpoint_file, results, processed)
+# Always use try-finally
+db_path = os.getenv("DB_PATH")
+if not db_path:
+    raise HTTPException(status_code=500, detail="DB not configured")
+
+conn = ddb.connect(db_path)
+try:
+    df = conn.execute(query, params).pl()
+    data = df.to_dicts()
+finally:
+    try:
+        conn.close()
+    except Exception:
+        pass
 ```
 
-## Performance Considerations
+### Parameterized Queries (Required)
+```python
+# ✅ CORRECT - Use parameters
+query = "SELECT * FROM price_data WHERE UPPER(ticker) = UPPER(?)"
+params = [ticker]
+df = conn.execute(query, params).pl()
 
-- Use batch operations for multiple API calls
-- Implement rate limiting to respect API limits
-- Reuse database connections when possible
-- Use appropriate data structures (Polars for analytics)
-- Add database indexes for frequently queried columns
+# ❌ WRONG - Never use f-strings for SQL
+query = f"SELECT * FROM price_data WHERE ticker = '{ticker}'"
+```
 
-## Error Messages
+### Polars DataFrames
+```python
+df = conn.execute(query, params).pl()  # DuckDB → Polars
+data = df.to_dicts()                   # → List of dicts
+tickers = df["ticker"].to_list()       # Extract column
+```
 
-- Be descriptive but don't expose sensitive information
-- Include context when possible
-- Use appropriate HTTP status codes in APIs
+---
+
+## Logging
 
 ```python
-# Good
-raise HTTPException(status_code=404, detail="Ticker not found")
+from logger.logger import get_logger, setup_logging
 
-# Bad - exposes implementation details
-raise HTTPException(status_code=500, detail="KeyError: 'results'")
-```</content>
-<parameter name="filePath">C:\Users\renar\OneDrive\Bureau\PythonPoject\DataProject\AGENTS.md
+setup_logging()  # In main/entry point
+logger = get_logger(__name__)
+
+logger.info(f"Processing {len(tickers)} tickers")
+logger.debug(f"Data: {data.keys()}")
+logger.warning(f"Skipping {ticker}: {e}")
+logger.error(f"Failed: {e}")
+logger.exception("Error with traceback")  # In except blocks
+```
+
+---
+
+## Environment Configuration
+
+```python
+from dotenv import load_dotenv
+import os
+
+load_dotenv("./secret/.env")
+
+# Always validate required vars
+db_path = os.getenv("DB_PATH")
+if not db_path:
+    raise ValueError("DB_PATH required")
+```
+
+**Never commit**: `.env` files, API keys, credentials
+
+---
+
+## Security Checklist
+
+✅ **DO**:
+- Store secrets in `.env`
+- Use parameterized SQL queries
+- Validate all inputs
+- Log without sensitive data
+
+❌ **DON'T**:
+- Commit `.env` files
+- Use f-strings for SQL
+- Expose stack traces to users
+- Log passwords/keys
+
+---
+
+## File Structure
+
+```
+DataProject/
+├── main.py              # FastAPI entry point
+├── api/                 # API layer
+│   ├── dependencies.py  # Shared dependencies
+│   ├── routers/        # Domain routers
+│   │   ├── companies.py
+│   │   ├── tickers.py
+│   │   └── treasury.py
+│   └── models/         # Pydantic models
+├── ELT/                # ETL operations
+│   ├── extract_*.py
+│   └── load_*.py
+├── database/           # DB utilities
+├── logger/             # Logging
+└── secret/             # .env files
+```
