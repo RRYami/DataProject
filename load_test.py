@@ -15,14 +15,12 @@ Features:
 import asyncio
 import random
 import time
-from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import Dict
 
 import httpx
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 console = Console()
 
@@ -30,7 +28,7 @@ console = Console()
 API_BASE_URL = "http://localhost:8000"
 
 # Sample data for realistic requests
-TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "AMD"]
+TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "AMD"]
 START_DATES = ["2024-01-01", "2024-06-01", "2023-01-01", "2024-03-01"]
 END_DATES = ["2024-12-31", "2024-11-30", "2024-06-30"]
 
