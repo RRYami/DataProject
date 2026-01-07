@@ -48,6 +48,12 @@ start_stack() {
     
     check_docker
     
+    echo ""
+    print_info "NOTE: Prometheus metrics will be FRESH (previous data cleared)"
+    print_info "      Grafana settings will persist (passwords, dashboards kept)"
+    print_info "      Database will persist (your financial data is safe)"
+    echo ""
+    
     print_info "Building and starting containers..."
     docker-compose up -d --build
     
@@ -63,6 +69,7 @@ start_stack() {
     echo ""
     print_info "Grafana dashboard: http://localhost:3000/d/dataproject-api"
     echo ""
+    print_info "TIP: Run load tests to populate metrics: uv run python load_test.py"
     print_info "Run 'docker-compose logs -f' to view logs"
 }
 
@@ -72,6 +79,11 @@ stop_stack() {
     
     check_docker
     
+    echo ""
+    print_info "NOTE: Prometheus metrics will be cleared on next start"
+    print_info "      Grafana settings will be preserved"
+    echo ""
+    
     docker-compose down
     print_success "Stack stopped successfully!"
 }
@@ -79,6 +91,11 @@ stop_stack() {
 # Restart the monitoring stack
 restart_stack() {
     print_header "Restarting DataProject Monitoring Stack"
+    
+    echo ""
+    print_info "NOTE: This will give you fresh Prometheus metrics"
+    echo ""
+    
     stop_stack
     sleep 2
     start_stack
@@ -109,6 +126,14 @@ cleanup() {
     print_header "Cleaning Up DataProject Monitoring Stack"
     
     check_docker
+    
+    echo ""
+    print_info "This will remove:"
+    echo "  - All containers"
+    echo "  - All networks"
+    echo "  - Grafana settings (passwords, dashboard edits)"
+    echo ""
+    read -p "Press Enter to continue, or Ctrl+C to cancel..."
     
     print_info "Stopping and removing containers, networks, and volumes..."
     docker-compose down -v
@@ -142,12 +167,15 @@ case "$1" in
         echo "Usage: $0 {start|stop|restart|logs|status|cleanup}"
         echo ""
         echo "Commands:"
-        echo "  start    - Start the monitoring stack (API + Prometheus + Grafana)"
-        echo "  stop     - Stop the monitoring stack"
-        echo "  restart  - Restart the monitoring stack"
+        echo "  start    - Start the monitoring stack (fresh Prometheus metrics)"
+        echo "  stop     - Stop the monitoring stack (Prometheus data cleared)"
+        echo "  restart  - Restart the monitoring stack (fresh metrics)"
         echo "  logs     - View logs (use 'logs api', 'logs prometheus', or 'logs grafana')"
         echo "  status   - Show status of all containers"
-        echo "  cleanup  - Stop and remove all containers, networks, and volumes"
+        echo "  cleanup  - Stop and remove all containers, networks, and volumes (including Grafana)"
+        echo ""
+        echo "NOTE: Prometheus metrics are ephemeral (fresh on every start/restart)"
+        echo "      Grafana settings persist (unless you run cleanup)"
         exit 1
         ;;
 esac

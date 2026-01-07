@@ -753,6 +753,11 @@ This will start:
 - **Prometheus** on http://localhost:9090
 - **Grafana** on http://localhost:3000 (admin/admin)
 
+**Important: Ephemeral Metrics**
+- ✅ Prometheus metrics are **fresh on every restart** (perfect for testing)
+- ✅ Grafana settings **persist** (passwords, dashboards saved)
+- ✅ Database data **persists** (your financial data is safe)
+
 **Access the Dashboard:**
 Open http://localhost:3000/d/dataproject-api to see:
 - Real-time request rates and latencies

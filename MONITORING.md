@@ -2,6 +2,33 @@
 
 This guide will help you set up and run the DataProject monitoring stack with Prometheus and Grafana.
 
+## Important: Ephemeral Metrics Behavior
+
+**🔄 Fresh Metrics on Every Restart**
+
+This monitoring stack is configured for **development and testing** with the following behavior:
+
+- ✅ **Prometheus metrics are EPHEMERAL** - Cleared on every restart
+- ✅ **Grafana settings are PERSISTENT** - Passwords and dashboards are kept
+- ✅ **Database data is PERSISTENT** - Your financial data is safe
+
+**What this means:**
+- Every time you stop and start the stack, you get **fresh metrics starting from zero**
+- Perfect for testing load scenarios without historical clutter
+- Grafana customizations (password changes, dashboard edits) persist
+- Your API database (companies, prices, treasury data) remains intact
+
+**Use Cases:**
+- 🎯 Load testing with fresh metrics each session
+- 🧪 Testing monitoring setup without old data
+- 📊 Demonstrating metrics from scratch
+- 🔄 Iterative development with clean slate
+
+**Not Recommended For:**
+- ❌ Production environments (use persistent Prometheus storage)
+- ❌ Long-term trend analysis across restarts
+- ❌ Historical metric comparison
+
 ## Prerequisites
 
 - Docker Desktop installed and running
@@ -180,25 +207,89 @@ docker network inspect dataproject_monitoring
 ## Stopping the Stack
 
 ```bash
-# Stop containers (keep data)
+# Stop containers (metrics will be cleared on next start)
 docker-compose down
 
-# Stop and remove all data
+# Stop and remove ALL data (including Grafana settings)
 docker-compose down -v
 ```
 
+**Note:** 
+- `docker-compose down` stops containers and clears Prometheus metrics automatically (they're ephemeral)
+- `docker-compose down -v` also removes Grafana settings (passwords, dashboard edits)
+- Use the helper scripts for clearer messaging about what's being cleared
+
+## Understanding Data Persistence
+
+### What Gets Cleared on Restart
+
+**Prometheus Metrics** (Ephemeral):
+- Request counts
+- Latency histograms
+- Error rates
+- Database query metrics
+- All time-series data
+
+**Result:** Fresh start for testing!
+
+### What Persists Across Restarts
+
+**Grafana Settings** (Persistent):
+- Admin password changes
+- Dashboard customizations
+- Panel configurations
+- User preferences
+
+**API Database** (Persistent):
+- Company details
+- Price history
+- Treasury yield curves
+- All financial data
+
+**Result:** No need to reconfigure!
+
+### Converting to Production Setup
+
+If you need **persistent Prometheus metrics** for production:
+
+1. Edit `docker-compose.yml`
+2. Uncomment the Prometheus volume:
+   ```yaml
+   volumes:
+     - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+     - prometheus-data:/prometheus  # Add this line
+   ```
+3. Add volume definition at bottom:
+   ```yaml
+   volumes:
+     prometheus-data:
+       driver: local
+     grafana-data:
+       driver: local
+   ```
+4. Configure retention policies in `prometheus.yml`
+5. Set up regular backups
+
 ## Production Notes
 
-Before deploying to production:
+**⚠️ Current Configuration: Development/Testing Mode**
 
-1. **Change Grafana password** in docker-compose.yml
-2. **Add authentication** to your API endpoints
-3. **Use proper secrets management** (not .env files)
-4. **Configure retention policies** in Prometheus
-5. **Set up alerting** in Grafana
-6. **Use reverse proxy** (nginx) with HTTPS
-7. **Configure backup** for Grafana dashboards
-8. **Monitor disk usage** for Prometheus data
+This stack uses **ephemeral Prometheus metrics** perfect for development but NOT recommended for production.
+
+### For Production Deployment:
+
+1. **Enable Persistent Prometheus Storage** (see "Converting to Production Setup" above)
+2. **Change Grafana password** in docker-compose.yml or via environment variable
+3. **Add authentication** to your API endpoints
+4. **Use proper secrets management** (vault, AWS Secrets Manager, not .env files)
+5. **Configure retention policies** in Prometheus (default: 15 days)
+6. **Set up alerting** in Grafana for critical thresholds
+7. **Use reverse proxy** (nginx/traefik) with HTTPS/TLS
+8. **Configure backup** for Grafana dashboards and Prometheus data
+9. **Monitor disk usage** for Prometheus TSDB storage
+10. **Set resource limits** in docker-compose.yml (CPU, memory)
+11. **Use external volume drivers** for better performance
+12. **Implement high availability** (Prometheus HA, Grafana clustering)
 
 ## Next Steps
 
