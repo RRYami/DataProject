@@ -51,6 +51,7 @@ This project provides a modular system for extracting financial data, loading it
 DataProject/
 ├── main.py                    # FastAPI application entry point
 ├── main_backup.py             # Backup of legacy main.py
+├── load_test.py               # Load testing tool for generating traffic
 ├── Dockerfile                 # Docker container definition
 ├── docker-compose.yml         # Multi-container orchestration
 ├── .dockerignore             # Docker build exclusions
@@ -115,6 +116,7 @@ DataProject/
 ├── AGENTS.md                 # Development guidelines for AI agents
 ├── API_STRUCTURE.md          # Detailed API structure documentation
 ├── MONITORING.md             # Monitoring stack setup guide
+├── LOAD_TESTING.md           # Load testing tool documentation
 └── README.md                 # This file
 ```
 
@@ -781,6 +783,42 @@ See [MONITORING.md](MONITORING.md) for complete setup instructions and troublesh
    - Download from https://grafana.com/grafana/download
    - Add Prometheus as datasource
    - Import dashboard from `monitoring/grafana/dashboards/`
+
+#### Load Testing
+
+Generate realistic traffic to populate your Grafana dashboards with metrics:
+
+```bash
+uv run python load_test.py
+```
+
+**Test Scenarios:**
+- **Standard Load Test**: 5 minutes with varying intensity (low → medium → high → burst)
+- **Quick Test**: 1 minute test for quick validation
+- **Morning Rush**: Custom scenario simulating realistic traffic pattern
+- **Quick Burst**: 100 concurrent requests to test spike handling
+- **Long Test**: 15 minutes for comprehensive metrics
+
+The load tester automatically:
+- Generates requests to all API endpoints with realistic distribution
+- Cycles through different intensity levels (2-1000 req/sec)
+- Displays real-time statistics in terminal
+- Creates beautiful metrics in Grafana
+
+See [LOAD_TESTING.md](LOAD_TESTING.md) for detailed documentation.
+
+**Example:**
+```bash
+# Start monitoring stack
+monitoring-stack.bat start
+
+# In another terminal, run load test
+uv run python load_test.py
+
+# Choose option 1 for standard test
+# Open Grafana: http://localhost:3000/d/dataproject-api
+# Watch metrics populate in real-time!
+```
 
 #### Metrics Middleware
 
