@@ -52,6 +52,8 @@ DataProject/
 ├── main.py                    # FastAPI application entry point
 ├── main_backup.py             # Backup of legacy main.py
 ├── load_test.py               # Load testing tool for generating traffic
+├── download.bat               # Data download tool (Windows)
+├── download.sh                # Data download tool (Linux/macOS)
 ├── Dockerfile                 # Docker container definition
 ├── docker-compose.yml         # Multi-container orchestration
 ├── .dockerignore             # Docker build exclusions
@@ -76,6 +78,7 @@ DataProject/
 │       └── ticker.py         # Ticker data models
 ├── ELT/                      # Extract, Load, Transform pipeline
 │   ├── __init__.py
+│   ├── download_cli.py       # Download tool CLI script
 │   ├── extract_polygon.py    # Polygon.io data extraction
 │   ├── extract_fred.py       # FRED API data extraction
 │   ├── extract_http.py       # Alpha Vantage fundamentals (legacy)
@@ -117,6 +120,7 @@ DataProject/
 ├── API_STRUCTURE.md          # Detailed API structure documentation
 ├── MONITORING.md             # Monitoring stack setup guide
 ├── LOAD_TESTING.md           # Load testing tool documentation
+├── DOWNLOAD.md               # Data download tool documentation
 └── README.md                 # This file
 ```
 
@@ -824,6 +828,53 @@ uv run python load_test.py
 # Open Grafana: http://localhost:3000/d/dataproject-api
 # Watch metrics populate in real-time!
 ```
+
+### 📥 Data Download Tool
+
+Download financial data directly from the command line with our convenient download tool:
+
+**Quick Examples:**
+```bash
+# Download 30 days of price data for Apple
+download.bat price AAPL
+
+# Download company details for multiple tickers
+download.bat company AAPL,MSFT,GOOGL
+
+# Download 90 days of treasury yields
+download.bat treasury
+```
+
+**Key Features:**
+- ✅ Command-line interface for fast data downloads
+- ✅ Support for price data, company details, and treasury yields
+- ✅ Multiple tickers in one command (comma-separated)
+- ✅ Sensible date defaults (30 days for prices, 90 days for treasuries)
+- ✅ Input validation and error handling
+- ✅ Progress display and success verification
+- ✅ Continues on errors (skips failed tickers)
+- ✅ Works on Windows (`.bat`) and Linux/macOS (`.sh`)
+
+**Available Commands:**
+
+```bash
+# Price data (OHLCV)
+download.bat price <tickers> [start_date] [end_date]
+download.bat price AAPL 2025-01-01 2025-01-07
+download.bat price AAPL,MSFT,GOOGL
+
+# Company details
+download.bat company <tickers>
+download.bat company AAPL,MSFT,GOOGL
+download.bat company --all  # All tickers from database
+
+# Treasury yields (FRED)
+download.bat treasury [start_date] [end_date]
+download.bat treasury 2024-01-01 2024-12-31
+download.bat treasury  # Last 90 days
+```
+
+See [DOWNLOAD.md](DOWNLOAD.md) for complete documentation, examples, and troubleshooting.
 
 #### Metrics Middleware
 
