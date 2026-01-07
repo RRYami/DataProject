@@ -51,6 +51,11 @@ This project provides a modular system for extracting financial data, loading it
 DataProject/
 ├── main.py                    # FastAPI application entry point
 ├── main_backup.py             # Backup of legacy main.py
+├── Dockerfile                 # Docker container definition
+├── docker-compose.yml         # Multi-container orchestration
+├── .dockerignore             # Docker build exclusions
+├── monitoring-stack.sh       # Monitoring stack manager (Linux/macOS)
+├── monitoring-stack.bat      # Monitoring stack manager (Windows)
 ├── api/                       # FastAPI API layer (modular structure)
 │   ├── __init__.py
 │   ├── dependencies.py        # Shared dependencies (DB connections, etc.)
@@ -90,6 +95,12 @@ DataProject/
 │   ├── __init__.py
 │   └── logger.py
 ├── logs/                     # Application logs directory
+├── monitoring/               # Monitoring stack configuration
+│   ├── prometheus/
+│   │   └── prometheus.yml    # Prometheus configuration
+│   └── grafana/
+│       ├── provisioning/     # Auto-provisioning configs
+│       └── dashboards/       # Pre-built dashboards
 ├── tests/                    # Test suite
 │   ├── __init__.py
 │   ├── conftest.py           # Pytest fixtures
@@ -103,6 +114,7 @@ DataProject/
 ├── pyproject.toml            # Project dependencies and configuration
 ├── AGENTS.md                 # Development guidelines for AI agents
 ├── API_STRUCTURE.md          # Detailed API structure documentation
+├── MONITORING.md             # Monitoring stack setup guide
 └── README.md                 # This file
 ```
 
@@ -110,6 +122,7 @@ DataProject/
 
 - Python >= 3.13
 - UV package manager (recommended) or pip
+- Docker & Docker Compose (optional, for monitoring stack)
 
 ### Dependencies
 
@@ -176,11 +189,44 @@ The logging system uses a queue-based handler for thread-safe logging. Configura
 
 ## Usage
 
-### Running the FastAPI Application
+### Option 1: Full Stack with Docker Compose (Recommended)
 
-Start the FastAPI REST service from the project root:
+The easiest way to run everything including monitoring:
+
+**Windows:**
+```cmd
+monitoring-stack.bat start
+```
+
+**Linux/macOS:**
+```bash
+chmod +x monitoring-stack.sh
+./monitoring-stack.sh start
+```
+
+This starts:
+- FastAPI application with all endpoints
+- Prometheus metrics collection
+- Grafana dashboards
+
+Access:
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- Grafana Dashboard: http://localhost:3000 (admin/admin)
+- Prometheus: http://localhost:9090
+
+See [MONITORING.md](MONITORING.md) for details.
+
+### Option 2: Running API Only (Local Development)
+
+Start just the FastAPI REST service:
 
 **Using UV (recommended):**
+```bash
+uv run uvicorn main:app --reload
+```
+
+**Or using FastAPI CLI:**
 ```bash
 uv run fastapi dev main.py
 ```
@@ -687,9 +733,36 @@ The API includes built-in Prometheus metrics collection for production monitorin
 - Price history request counts
 - Treasury curve request counts
 
-#### Using Prometheus
+#### Full Monitoring Stack (Docker Compose)
 
-1. **Start the API** with monitoring enabled (already configured):
+We provide a complete monitoring stack with Prometheus and Grafana pre-configured:
+
+**Quick Start:**
+```bash
+# Windows
+monitoring-stack.bat start
+
+# Linux/macOS
+./monitoring-stack.sh start
+```
+
+This will start:
+- **FastAPI API** on http://localhost:8000
+- **Prometheus** on http://localhost:9090
+- **Grafana** on http://localhost:3000 (admin/admin)
+
+**Access the Dashboard:**
+Open http://localhost:3000/d/dataproject-api to see:
+- Real-time request rates and latencies
+- Database query performance
+- Error rates and exceptions
+- Business metrics (ticker queries, price requests, etc.)
+
+See [MONITORING.md](MONITORING.md) for complete setup instructions and troubleshooting.
+
+#### Manual Setup (Without Docker)
+
+1. **Start the API** with monitoring enabled:
    ```bash
    uv run uvicorn main:app --host 0.0.0.0 --port 8000
    ```
@@ -699,20 +772,15 @@ The API includes built-in Prometheus metrics collection for production monitorin
    curl http://localhost:8000/monitoring/metrics
    ```
 
-3. **Configure Prometheus** to scrape metrics (`prometheus.yml`):
-   ```yaml
-   scrape_configs:
-     - job_name: 'dataproject-api'
-       scrape_interval: 15s
-       static_configs:
-         - targets: ['localhost:8000']
-       metrics_path: '/monitoring/metrics'
-   ```
+3. **Install and configure Prometheus** manually:
+   - Download from https://prometheus.io/download/
+   - Use `monitoring/prometheus/prometheus.yml` config
+   - Start Prometheus pointing to your API
 
-4. **Grafana Dashboard** (optional):
-   - Import metrics from Prometheus
-   - Create dashboards for request rates, latencies, errors
-   - Set up alerts for high error rates or slow queries
+4. **Install and configure Grafana** manually:
+   - Download from https://grafana.com/grafana/download
+   - Add Prometheus as datasource
+   - Import dashboard from `monitoring/grafana/dashboards/`
 
 #### Metrics Middleware
 

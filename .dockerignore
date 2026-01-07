@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+.zed/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+logs/
+*.log
+
+# Database (use volume mount instead)
+database/*.duckdb
+database/*.duckdb.wal
+
+# Secrets
+secret/
+.env
+*.pem
+*.key
+
+# Testing
+tests/
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Monitoring data (handled by docker volumes)
+monitoring/prometheus/data/
+monitoring/grafana/data/
+
+# Temporary files
+*.tmp
+*.bak
+.DS_Store
