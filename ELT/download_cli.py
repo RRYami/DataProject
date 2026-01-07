@@ -4,16 +4,13 @@ import argparse
 import os
 import sys
 from datetime import date, timedelta
-from typing import Optional
+from pathlib import Path
 
 import duckdb as ddb
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-
-import sys
-from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

@@ -43,6 +43,7 @@ async def get_price_history(
         SELECT *
         FROM price_data
         WHERE UPPER(ticker) = UPPER(?)
+        ORDER BY date ASC
     """
     params = [ticker]
 
