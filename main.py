@@ -3,13 +3,15 @@ DataProject FastAPI Application.
 
 Main entry point for the FastAPI application.
 All API endpoints are organized in separate routers under the api/ directory.
+Includes monitoring and metrics collection via Prometheus.
 """
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import companies, tickers, treasury
+from api.monitoring.middleware import PrometheusMiddleware
+from api.routers import companies, monitoring, tickers, treasury
 
 # Load environment variables
 load_dotenv("./secret/.env")
@@ -32,10 +34,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add monitoring middleware
+app.add_middleware(PrometheusMiddleware)
+
 # Include routers
 app.include_router(companies.router)
 app.include_router(tickers.router)
 app.include_router(treasury.router)
+app.include_router(monitoring.router)
 
 
 @app.get("/", tags=["root"])
@@ -51,6 +57,8 @@ async def root() -> dict:
         "version": "1.0.0",
         "docs": "/docs",
         "redoc": "/redoc",
+        "metrics": "/monitoring/metrics",
+        "health": "/health",
     }
 
 

@@ -17,6 +17,8 @@ This project provides a modular system for extracting financial data, loading it
 - 🔗 **Industry Classification**: SIC to NAICS code mapping for industry analysis
 - 🎯 **Professional Structure**: Organized API routers, Pydantic models, and shared dependencies
 - 📚 **Auto Documentation**: Interactive Swagger UI and ReDoc with organized domain tags
+- 🧪 **Comprehensive Testing**: Full test suite with pytest covering all API endpoints
+- 📊 **Prometheus Monitoring**: Built-in metrics collection for requests, database queries, and performance
 
 ## Features
 
@@ -52,11 +54,17 @@ DataProject/
 ├── api/                       # FastAPI API layer (modular structure)
 │   ├── __init__.py
 │   ├── dependencies.py        # Shared dependencies (DB connections, etc.)
+│   ├── monitoring/           # Monitoring and metrics
+│   │   ├── __init__.py
+│   │   ├── metrics.py        # Prometheus metrics definitions
+│   │   ├── middleware.py     # Metrics collection middleware
+│   │   └── monitoring.py     # Monitoring endpoints
 │   ├── routers/              # Domain-specific API routers
 │   │   ├── __init__.py
 │   │   ├── companies.py      # Company & price history endpoints
 │   │   ├── tickers.py        # Ticker/indices management endpoints
-│   │   └── treasury.py       # Treasury yield curve endpoints
+│   │   ├── treasury.py       # Treasury yield curve endpoints
+│   │   └── monitoring.py     # Monitoring/health endpoints
 │   └── models/               # Pydantic models for request/response
 │       ├── __init__.py
 │       └── ticker.py         # Ticker data models
@@ -82,6 +90,13 @@ DataProject/
 │   ├── __init__.py
 │   └── logger.py
 ├── logs/                     # Application logs directory
+├── tests/                    # Test suite
+│   ├── __init__.py
+│   ├── conftest.py           # Pytest fixtures
+│   └── routers/             # Router tests
+│       ├── test_companies.py
+│       ├── test_tickers.py
+│       └── test_treasury.py
 ├── secret/                   # Sensitive configuration
 │   └── .env                  # Environment variables (API keys, DB path)
 ├── get_api_keys.py           # Centralized API key management
@@ -106,6 +121,11 @@ DataProject/
 - `requests` - HTTP library
 - `pendulum` - DateTime handling
 - `pyarrow` - Apache Arrow support
+- `pytest` - Testing framework (dev dependency)
+- `pytest-asyncio` - Async test support (dev dependency)
+- `pytest-cov` - Code coverage (dev dependency)
+- `httpx` - HTTP client for testing (dev dependency)
+- `prometheus-client` - Prometheus metrics collection
 
 ## Installation
 
@@ -194,6 +214,47 @@ Returns API information and documentation links.
 GET /health
 ```
 Returns API health status.
+
+#### Monitoring Endpoints
+
+**Prometheus Metrics**
+```
+GET /monitoring/metrics
+```
+Returns all Prometheus metrics in text exposition format for scraping.
+
+**Metrics Summary**
+```
+GET /monitoring/stats
+```
+Returns available metrics and their descriptions.
+
+**Detailed Health**
+```
+GET /monitoring/health/detailed
+```
+Returns detailed health information including metric endpoints.
+
+**Example:**
+```bash
+# Get Prometheus metrics
+curl http://127.0.0.1:8000/monitoring/metrics
+
+# Get metrics summary
+curl http://127.0.0.1:8000/monitoring/stats
+```
+
+Available metrics include:
+- `http_requests_total` - Total HTTP requests by method, endpoint, status
+- `http_request_duration_seconds` - Request latency histogram
+- `http_requests_in_progress` - Current in-progress requests
+- `db_queries_total` - Total database queries by operation and table
+- `db_query_duration_seconds` - Database query latency
+- `db_connections_active` - Active database connections
+- `http_exceptions_total` - Total exceptions by type
+- `tickers_queried_total` - Total ticker queries
+- `price_history_requests_total` - Price history requests
+- `treasury_curve_requests_total` - Treasury curve requests
 
 #### 1. Get Company Details
 ```
@@ -545,6 +606,124 @@ print(result)
 
 ## Development
 
+### Testing
+
+The project includes a comprehensive test suite covering all API endpoints.
+
+#### Running Tests
+
+Run all tests:
+```bash
+uv run pytest -v
+```
+
+Run specific test file:
+```bash
+uv run pytest tests/routers/test_companies.py -v
+```
+
+Run specific test:
+```bash
+uv run pytest tests/routers/test_companies.py::TestGetCompany::test_get_company_success -v
+```
+
+#### Code Coverage
+
+Generate coverage report:
+```bash
+# Run tests with coverage
+uv run pytest --cov=api --cov=ELT --cov-report=html
+
+# Open coverage report
+# Windows: start htmlcov/index.html
+# macOS: open htmlcov/index.html
+# Linux: xdg-open htmlcov/index.html
+```
+
+Current test coverage:
+- **35 tests** covering all API endpoints
+- Company endpoints: 12 tests
+- Ticker endpoints: 11 tests  
+- Treasury endpoints: 14 tests
+- Test fixtures with isolated database per test
+- Validation testing for Pydantic models
+
+#### Test Structure
+
+```
+tests/
+├── conftest.py              # Shared fixtures and test database setup
+└── routers/
+    ├── test_companies.py    # Company & price history endpoint tests
+    ├── test_tickers.py      # Ticker/indices endpoint tests
+    └── test_treasury.py     # Treasury yield curve endpoint tests
+```
+
+Each test file includes:
+- **Success cases**: Valid requests with expected responses
+- **Error cases**: Invalid inputs and 404 scenarios
+- **Data validation**: Schema and type checking
+- **Edge cases**: Boundary conditions and special cases
+
+### Monitoring & Observability
+
+The API includes built-in Prometheus metrics collection for production monitoring.
+
+#### Available Metrics
+
+**HTTP Metrics:**
+- Request counts by method, endpoint, and status code
+- Request duration histograms
+- In-progress request gauges
+- Exception counts by type
+
+**Database Metrics:**
+- Query counts by operation and table
+- Query duration histograms
+- Active connection counts
+
+**Business Metrics:**
+- Ticker query counts
+- Price history request counts
+- Treasury curve request counts
+
+#### Using Prometheus
+
+1. **Start the API** with monitoring enabled (already configured):
+   ```bash
+   uv run uvicorn main:app --host 0.0.0.0 --port 8000
+   ```
+
+2. **Access metrics endpoint**:
+   ```bash
+   curl http://localhost:8000/monitoring/metrics
+   ```
+
+3. **Configure Prometheus** to scrape metrics (`prometheus.yml`):
+   ```yaml
+   scrape_configs:
+     - job_name: 'dataproject-api'
+       scrape_interval: 15s
+       static_configs:
+         - targets: ['localhost:8000']
+       metrics_path: '/monitoring/metrics'
+   ```
+
+4. **Grafana Dashboard** (optional):
+   - Import metrics from Prometheus
+   - Create dashboards for request rates, latencies, errors
+   - Set up alerts for high error rates or slow queries
+
+#### Metrics Middleware
+
+All requests automatically track:
+- Request latency
+- Response status codes
+- Exception types
+- Database operation timing
+
+No additional instrumentation needed in route handlers.
+
 ### Code Quality
 
 The project uses Ruff for linting and formatting with an 80-character line length limit:
@@ -669,8 +848,8 @@ The application can generate:
 - [ ] PostgreSQL support for larger datasets
 - [ ] Docker containerization
 - [ ] CI/CD pipeline
-- [ ] Unit and integration tests
-- [ ] Performance monitoring and metrics
+- [x] Unit and integration tests
+- [x] Performance monitoring and metrics (Prometheus)
 
 ## License
 
